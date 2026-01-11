@@ -1,0 +1,58 @@
+# BMF Comments
+# Review comments for BMF specifications
+#
+# Schema (matches viewer import/export):
+#   comments:
+#     - ref: string            # Entity ID (e.g., "entity:users:user")
+#       text: string           # Main comment text
+#       createdAt: number      # Unix timestamp in milliseconds
+#       resolved: boolean      # Whether comment is resolved
+#       resolution: string?    # Optional resolution notes
+#       questions:             # Optional Q&A thread
+#         - question: string
+#           answer: string?
+#
+# Use: /bmf-comments {project} to manage interactively
+# Or:  BMF Viewer -> Export YAML
+
+# =============================================================================
+# BASIC COMMENT
+# =============================================================================
+
+comments:
+  - ref: entity:users:user
+    text: |
+      Need to add email validation
+    createdAt: 1704067200000
+    resolved: false
+
+
+# =============================================================================
+# RESOLVED COMMENT
+# =============================================================================
+
+  - ref: screen:home:main
+    text: |
+      Missing loading state
+    createdAt: 1704067200000
+    resolved: true
+    resolution: |
+      Added loading component in commit abc123
+
+
+# =============================================================================
+# COMMENT WITH QUESTIONS
+# =============================================================================
+
+  - ref: action:orders:submit
+    text: |
+      Review payment flow
+    createdAt: 1704067200000
+    resolved: false
+    questions:
+      - question: |
+          Should we add retry logic for failed payments?
+        answer: |
+          Yes, max 3 retries with exponential backoff
+      - question: |
+          What about partial refunds?

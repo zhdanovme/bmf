@@ -1,0 +1,769 @@
+# yaml-language-server: $schema=../schema.json
+# BMF Test Spec - Combinatorics
+# All syntax variations for testing
+
+# =============================================================================
+# CONTEXT
+# =============================================================================
+
+context:
+  attributes:
+    user_id: uuid
+    user: query $entity.users.user where id == user_id
+    session_token: string
+    is_premium: false
+    daily_progress:
+      logged_in: false
+      steps: 0
+
+
+# =============================================================================
+# ENTITIES - attribute types
+# =============================================================================
+
+entity:test:primitives:
+  description: All primitive types
+  attributes:
+    id: uuid
+    name: string
+    count: 0
+    price: 0.0
+    is_active: true
+    created_at: datetime
+
+entity:test:references:
+  description: Entity with references
+  attributes:
+    id: uuid
+    owner_id: $entity.users.user
+    parent_id: $entity.test.primitives
+
+entity:users:user:
+  description: User entity
+  attributes:
+    id: uuid
+    email: string
+    name: string
+    level: 1
+    balance: 0
+
+
+# =============================================================================
+# ACTIONS - effect variations
+# =============================================================================
+
+# --- Simple effect (string) ---
+action:test:simple-effect:
+  description: Single string effect
+  effects:
+    - $screen.home
+
+# --- Multiple effects ---
+action:test:multiple-effects:
+  description: Multiple string effects
+  effects:
+    - $screen.home
+    - "$toast.info(message: Navigated)"
+
+# --- Effect with params ---
+action:test:effect-with-params:
+  description: Effect with parameters
+  effects:
+    - "$screen.details(id: data.item.id)"
+    - "$toast.success(message: Done, duration: 3000)"
+
+# --- If/then (no else) ---
+action:test:if-then:
+  description: Conditional without else
+  props:
+    value: integer
+  effects:
+    - if: props.value > 0
+      then:
+        - "$toast.success(message: Positive)"
+
+# --- If/then/else simple ---
+action:test:if-then-else:
+  description: Simple conditional
+  props:
+    value: integer
+  effects:
+    - if: props.value > 0
+      then:
+        - "$toast.success(message: Positive)"
+      else:
+        - "$toast.error(message: Not positive)"
+
+# --- If/then string (not array) ---
+action:test:if-then-string:
+  description: Then as string not array
+  props:
+    value: integer
+  effects:
+    - if: props.value > 0
+      then: "$toast.success(message: Positive)"
+      else: "$toast.error(message: Not positive)"
+
+# --- Nested if/else ---
+action:test:nested-if:
+  description: Nested conditionals
+  props:
+    value: integer
+  effects:
+    - if: props.value > 100
+      then:
+        - "$toast.info(message: Large)"
+      else:
+        - if: props.value > 50
+          then:
+            - "$toast.info(message: Medium)"
+          else:
+            - if: props.value > 0
+              then:
+                - "$toast.info(message: Small)"
+              else:
+                - "$toast.error(message: Zero or negative)"
+
+# --- Deeply nested ---
+action:test:deep-nesting:
+  description: Deep nesting test
+  props:
+    a: boolean
+    b: boolean
+    c: boolean
+  effects:
+    - if: props.a == true
+      then:
+        - if: props.b == true
+          then:
+            - if: props.c == true
+              then:
+                - "$toast.info(message: A and B and C)"
+              else:
+                - "$toast.info(message: A and B not C)"
+          else:
+            - "$toast.info(message: A not B)"
+      else:
+        - "$toast.info(message: Not A)"
+
+# --- Mixed effects and conditions ---
+action:test:mixed-effects:
+  description: String effects mixed with conditionals
+  props:
+    level: integer
+  effects:
+    - "$toast.info(message: Checking level)"
+    - if: props.level > 10
+      then:
+        - $dialog.premium-unlock
+      else:
+        - $dialog.level-up-prompt
+    - "$screen.profile"
+
+# --- With data query ---
+action:test:with-data:
+  description: Action with data
+  props:
+    user_id: uuid
+  data:
+    user: query $entity.users.user where id == props.user_id
+    items: query $entity.test.primitives where owner_id == props.user_id
+  effects:
+    - if: data.user.level > 5
+      then:
+        - "$toast.success(message: High level user)"
+
+# --- Create entity ---
+action:test:create-entity:
+  description: Create new entity
+  effects:
+    - "create $entity.test.primitives(name: New Item, count: 1)"
+
+# --- Update and delete ---
+action:test:crud:
+  description: CRUD operations
+  props:
+    item_id: uuid
+  data:
+    item: query $entity.test.primitives where id == props.item_id
+  effects:
+    - data.item.count = data.item.count + 1
+    - "data.item.name = Updated"
+
+
+# =============================================================================
+# EVENTS - to variations
+# =============================================================================
+
+# --- To specific user ---
+event:test:to-user:
+  description: Event to specific user
+  props:
+    user_id: uuid
+    message: string
+  to: props.user_id
+  effects:
+    - "$toast.info(message: props.message)"
+
+# --- To query result (group) ---
+event:test:to-group:
+  description: Event to group
+  props:
+    room_id: uuid
+  to: query users where room_id == props.room_id
+  effects:
+    - "$toast.info(message: Room notification)"
+
+# --- Broadcast (no to) ---
+event:test:broadcast:
+  description: Broadcast to all
+  props:
+    message: string
+  effects:
+    - "$dialog.announcement(message: props.message)"
+
+# --- Event with conditional ---
+event:test:conditional:
+  description: Event with conditional effects
+  props:
+    winner_id: uuid
+  to: query users where active == true
+  effects:
+    - if: $context.user_id == props.winner_id
+      then:
+        - $dialog.you-won
+      else:
+        - "$toast.info(message: Game over)"
+
+
+# =============================================================================
+# SCREENS - data variations
+# =============================================================================
+
+# --- No data ---
+screen:test:no-data:
+  description: Screen without data
+  layout: $layout.main
+  components:
+    - id: title
+      type: text
+      label: Static Screen
+
+# --- Context data ---
+screen:test:context-data:
+  description: Screen with context data
+  layout: $layout.main
+  data:
+    user: $context.user
+  components:
+    - id: name
+      type: value
+      label: Name
+      value: data.user.name
+
+# --- Query data ---
+screen:test:query-data:
+  description: Screen with query
+  layout: $layout.main
+  data:
+    items: query $entity.test.primitives where is_active == true
+  components:
+    - id: list
+      type: component
+      value: "$component.test.item-card(item: item of data.items)"
+
+# --- Input param ---
+screen:test:input-param:
+  description: Screen with input
+  layout: $layout.main
+  data:
+    item_id: input uuid
+    item: query $entity.test.primitives where id == data.item_id
+  components:
+    - id: name
+      type: value
+      label: Name
+      value: data.item.name
+
+# --- Multiple data sources ---
+screen:test:multi-data:
+  description: Screen with multiple data
+  layout: $layout.main
+  data:
+    user: $context.user
+    user_id: input uuid
+    target: query $entity.users.user where id == data.user_id
+    items: query $entity.test.primitives where owner_id == data.user_id
+  components:
+    - id: current
+      type: value
+      label: Current User
+      value: data.user.name
+    - id: target_name
+      type: value
+      label: Target User
+      value: data.target.name
+
+
+# =============================================================================
+# LAYOUTS
+# =============================================================================
+
+layout:main:
+  description: Main layout
+  components:
+    - id: nav_home
+      type: nav-item
+      label: Home
+      action: $action.test.simple-effect
+
+layout:fullscreen:
+  description: Fullscreen layout
+  components: []
+
+layout:with-header:
+  description: Layout with header component
+  components:
+    - id: header
+      type: component
+      value: "$component.test.header(title: App)"
+
+
+# =============================================================================
+# COMPONENTS - type variations
+# =============================================================================
+
+# --- Basic types ---
+component:test:all-types:
+  description: All component types
+  props:
+    user: $entity.users.user
+  components:
+    # Text (static label)
+    - id: static_text
+      type: text
+      label: Static Label
+
+    # Value (dynamic)
+    - id: dynamic_value
+      type: value
+      label: Balance
+      value: props.user.balance
+
+    # Button
+    - id: action_btn
+      type: button
+      label: Click Me
+      action: $action.test.simple-effect
+
+    # Button with params
+    - id: param_btn
+      type: button
+      label: View Details
+      action: "$screen.test.input-param(item_id: props.user.id)"
+
+    # Image
+    - id: avatar
+      type: image
+      value: props.user.avatar_url
+
+    # Icon
+    - id: status_icon
+      type: icon
+      value: check
+
+    # Input
+    - id: email_input
+      type: input
+      label: Email
+      placeholder: Enter email...
+
+    # Toggle
+    - id: notifications_toggle
+      type: toggle
+      label: Notifications
+      default: true
+
+# --- Trigger variations ---
+component:test:triggers:
+  description: Trigger variations
+  components:
+    # Simple trigger
+    - id: trigger_simple
+      type: trigger
+      value:
+        - if: $context.is_premium == true
+          then: $action.test.simple-effect
+
+    # Multiple conditions (OR-like)
+    - id: trigger_multi
+      type: trigger
+      value:
+        - if: $context.daily_progress.logged_in == true
+          then: "$action.test.effect-with-params(id: login)"
+        - if: $context.daily_progress.steps > 100
+          then: "$action.test.effect-with-params(id: steps)"
+
+    # Nested trigger
+    - id: trigger_nested
+      type: trigger
+      value:
+        - if: $context.user.level > 10
+          then:
+            - if: $context.is_premium == true
+              then: $dialog.super-premium
+              else: $dialog.premium-prompt
+          else:
+            - $dialog.level-up
+
+# --- Nested components ---
+component:test:nested:
+  description: Nested components
+  components:
+    - id: child
+      type: component
+      value: "$component.test.all-types(user: $context.user)"
+
+# --- List rendering ---
+component:test:list:
+  description: List component
+  props:
+    items: array
+  components:
+    - id: title
+      type: text
+      label: Items
+
+    - id: items_list
+      type: component
+      value: "$component.test.item-card(item: item of props.items)"
+
+component:test:item-card:
+  description: Item card
+  props:
+    item: $entity.test.primitives
+  components:
+    - id: name
+      type: value
+      value: props.item.name
+
+    - id: count
+      type: value
+      label: Count
+      value: props.item.count
+
+component:test:header:
+  description: Header component
+  props:
+    title: string
+    subtitle: string
+  components:
+    - id: title
+      type: text
+      value: props.title
+
+    - id: subtitle
+      type: text
+      value: props.subtitle
+
+
+# =============================================================================
+# DIALOGS
+# =============================================================================
+
+# --- Simple dialog ---
+dialog:test:simple:
+  description: Simple dialog
+  components:
+    - id: title
+      type: text
+      label: Dialog Title
+
+    - id: close_btn
+      type: button
+      label: Close
+      action: $dialog.close
+
+# --- Dialog with props ---
+dialog:test:with-props:
+  description: Dialog with props
+  props:
+    title: string
+    message: string
+    on_confirm: $action
+  components:
+    - id: title
+      type: text
+      value: props.title
+
+    - id: message
+      type: text
+      value: props.message
+
+    - id: cancel_btn
+      type: button
+      label: Cancel
+      action: $dialog.close
+
+    - id: confirm_btn
+      type: button
+      label: Confirm
+      action: props.on_confirm
+
+# --- Confirmation variants ---
+dialog:common:confirm-delete:
+  description: Delete confirmation
+  props:
+    item_name: string
+    on_confirm: $action
+  components:
+    - id: icon
+      type: icon
+      value: warning
+
+    - id: title
+      type: text
+      label: Delete Item?
+
+    - id: message
+      type: text
+      value: props.item_name
+
+    - id: cancel
+      type: button
+      label: Cancel
+      action: $dialog.close
+
+    - id: delete
+      type: button
+      label: Delete
+      action: props.on_confirm
+
+
+# =============================================================================
+# ACTION CHAINS - testing action-to-action effects
+# =============================================================================
+
+# --- $action that triggers another action ---
+action:test:chain-start:
+  description: First action in chain
+  effects:
+    - $action.test.chain-middle
+
+action:test:chain-middle:
+  description: Middle action in chain
+  effects:
+    - "$toast.info(message: Processing...)"
+    - $action.test.chain-end
+
+action:test:chain-end:
+  description: End action in chain
+  effects:
+    - "$toast.success(message: Complete!)"
+    - $screen.home
+
+# --- Conditional action chains ---
+action:test:conditional-chain:
+  description: Conditional action chain
+  props:
+    user_level: integer
+  effects:
+    - if: props.user_level > 10
+      then:
+        - $action.test.premium-flow
+      else:
+        - $action.test.basic-flow
+
+action:test:premium-flow:
+  description: Premium user flow
+  effects:
+    - $dialog.premium-features
+    - $action.test.analytics-track
+
+action:test:basic-flow:
+  description: Basic user flow
+  effects:
+    - $dialog.upgrade-prompt
+    - $action.test.analytics-track
+
+action:test:analytics-track:
+  description: Track analytics
+  effects:
+    - "$toast.info(message: Tracked)"
+
+
+# =============================================================================
+# MODALS for testing references
+# =============================================================================
+
+dialog:dialog:super-premium:
+  description: Super premium dialog
+  components:
+    - id: title
+      type: text
+      label: Super Premium Features
+    - id: close
+      type: button
+      label: Close
+      action: $dialog.close
+
+dialog:dialog:premium-prompt:
+  description: Premium prompt dialog
+  components:
+    - id: title
+      type: text
+      label: Upgrade to Premium?
+    - id: upgrade
+      type: button
+      label: Upgrade
+      action: $action.test.premium-flow
+    - id: close
+      type: button
+      label: Maybe Later
+      action: $dialog.close
+
+dialog:dialog:level-up:
+  description: Level up dialog
+  components:
+    - id: title
+      type: text
+      label: Level Up!
+    - id: close
+      type: button
+      label: Continue
+      action: $dialog.close
+
+dialog:dialog:premium-features:
+  description: Premium features showcase
+  components:
+    - id: title
+      type: text
+      label: Premium Features
+    - id: feature_list
+      type: component
+      value: "$component.test.header(title: Features)"
+    - id: close
+      type: button
+      label: Got it
+      action: $dialog.close
+
+dialog:dialog:upgrade-prompt:
+  description: Upgrade prompt
+  components:
+    - id: title
+      type: text
+      label: Unlock More Features
+    - id: upgrade_btn
+      type: button
+      label: Upgrade Now
+      action: $action.test.premium-flow
+    - id: close
+      type: button
+      label: Not Now
+      action: $dialog.close
+
+
+# =============================================================================
+# SCREEN with home for testing navigation
+# =============================================================================
+
+screen:home:
+  description: Home screen
+  layout: $layout.main
+  components:
+    - id: welcome
+      type: text
+      label: Welcome Home
+    - id: start_chain
+      type: button
+      label: Start Chain
+      action: $action.test.chain-start
+    - id: conditional
+      type: button
+      label: Conditional Flow
+      action: "$action.test.conditional-chain(user_level: $context.user.level)"
+
+
+# =============================================================================
+# COMPONENT INLINING TESTS
+# These test that component type entities get inlined (not shown as nodes)
+# =============================================================================
+
+# --- Inlinable component (should NOT appear as separate node) ---
+component:inline:user-card:
+  description: User card for inlining
+  props:
+    user: $entity.users.user
+  components:
+    - id: avatar
+      type: image
+      value: props.user.avatar_url
+    - id: name
+      type: value
+      value: props.user.name
+    - id: level
+      type: value
+      label: Level
+      value: props.user.level
+
+# --- Another inlinable component ---
+component:inline:stats-row:
+  description: Stats row for inlining
+  props:
+    label: string
+    value: string
+  components:
+    - id: label
+      type: text
+      value: props.label
+    - id: value
+      type: value
+      value: props.value
+
+# --- Screen that uses inlined components ---
+screen:inline:test-screen:
+  description: Screen testing component inlining
+  layout: $layout.main
+  data:
+    user: $context.user
+  components:
+    - id: title
+      type: text
+      label: User Profile
+
+    # This should inline component:inline:user-card contents
+    - id: user_card
+      type: component
+      value: "$component.inline.user-card(user: data.user)"
+
+    # Multiple inlined stats
+    - id: stats_balance
+      type: component
+      value: "$component.inline.stats-row(label: Balance, value: data.user.balance)"
+
+    - id: stats_level
+      type: component
+      value: "$component.inline.stats-row(label: Level, value: data.user.level)"
+
+    - id: edit_btn
+      type: button
+      label: Edit Profile
+      action: $dialog.profile-edit
+
+# --- Dialog using inlined components ---
+dialog:inline:profile-edit:
+  description: Profile edit using inlined components
+  components:
+    - id: header
+      type: component
+      value: "$component.test.header(title: Edit Profile, subtitle: Update your info)"
+
+    - id: name_input
+      type: input
+      label: Name
+      placeholder: Enter name
+
+    - id: save_btn
+      type: button
+      label: Save
+      action: $dialog.close

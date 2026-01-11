@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=../schema.json
+# External Systems Template
+# ID format: external:epic:name
+
+# =============================================================================
+# BASIC EXTERNAL SYSTEM
+# =============================================================================
+
+external:myepic:example:
+  description: Description
+  tags: [stage:design]
+  data:
+    field: string
+
+
+# =============================================================================
+# COMMON PATTERNS
+# =============================================================================
+
+# --- Payment Provider ---
+# external:payments:stripe:
+#   description: Payment processing service
+#   tags: [stage:mvp]
+#   data:
+#     charge: amount, currency, customer_id -> payment_intent_id
+#     refund: payment_intent_id -> refund_id
+#     customer: email, name -> customer_id
+
+# --- Email Service ---
+# external:notifications:sendgrid:
+#   description: Transactional email delivery
+#   data:
+#     send: to, template_id, variables -> message_id
+#     status: message_id -> delivered|bounced|opened
+
+# --- Auth Provider ---
+# external:auth:firebase:
+#   description: Authentication and identity provider
+#   data:
+#     token: id_token -> uid, email, claims
+#     verify: id_token -> valid|expired|invalid
