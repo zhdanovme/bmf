@@ -1,0 +1,17 @@
+{
+  "name": "bmf-validator",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "validate": "tsx utils/validate.ts",
+    "check-refs": "tsx utils/check-references.ts"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "yaml": "^2.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2"
+  }
+}

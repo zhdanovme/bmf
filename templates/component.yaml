@@ -1,0 +1,96 @@
+# yaml-language-server: $schema=../schema.json
+# Component Template
+# ID format: components:epic (for anchor groups)
+#
+# Компоненты — это переиспользуемые блоки UI, определённые как YAML anchors.
+# Используйте anchors для вставки компонентов в screens и dialogs.
+
+# =============================================================================
+# BASIC COMPONENTS (anchors)
+# =============================================================================
+
+components:myepic:
+  - &myepic:example-card
+    components:
+      - type: text
+        label: Static title
+      - type: value
+        value: "42"
+
+  - &myepic:header
+    components:
+      - type: text
+        label: data.user.display_name
+      - type: image
+        value: data.user.avatar_url
+
+
+# =============================================================================
+# COMPONENTS WITH PROPS
+# =============================================================================
+# Props передаются через data binding при использовании anchor
+
+components:common:
+  - &common:stat-card
+    # Используется: props.icon, props.label, props.value
+    components:
+      - type: image
+        value: props.icon
+      - type: text
+        label: props.label
+      - type: value
+        value: props.value
+
+  - &common:user-card
+    # Используется: props.rank?, props.avatar_url, props.name, props.stats?
+    components:
+      - type: value
+        value: props.rank
+        if: props.rank != null
+      - type: image
+        value: props.avatar_url
+      - type: text
+        label: props.name
+      - type: list
+        value: for stat of props.stats
+        if: props.stats != null
+        components:
+          - type: text
+            label: stat.label
+          - type: value
+            value: stat.value
+
+
+# =============================================================================
+# COMPONENTS WITH TRIGGERS
+# =============================================================================
+
+components:quests:
+  - &quests:list
+    components:
+      - type: trigger
+        if: "$context.current_aura == 10"
+        value: "$action.quests.complete(id: aura-10)"
+
+      - type: text
+        label: Quests
+
+      - type: list
+        value: for quest of data.quests
+        components:
+          - type: text
+            label: quest.name
+          - type: progress
+            value: quest.progress
+
+
+# =============================================================================
+# USAGE IN SCREENS
+# =============================================================================
+#
+# screen:myepic:main:
+#   components:
+#     - *myepic:header                    # простая вставка
+#     - *common:stat-card                 # вставка с props через data
+#     - if: condition                     # условная вставка
+#       then: *myepic:premium

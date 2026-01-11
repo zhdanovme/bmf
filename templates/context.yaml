@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=../schema.json
+# Context Template
+# Global singleton state
+
+context:global:main:
+  data:
+    # Current user
+    current_user_id: uuid
+    current_user: query $entity.users.user where id == current_user_id
+
+    # Computed queries examples:
+    # active_order: query $entity.orders.order where user_id == current_user_id and state == draft
+    # unread_count: query count $entity.notifications.notification where user_id == current_user_id and read == false

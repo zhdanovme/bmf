@@ -1,0 +1,94 @@
+# yaml-language-server: $schema=../schema.json
+# Dialog (Modal) Template
+# ID format: dialog:epic:name
+
+# =============================================================================
+# BASIC DIALOG
+# =============================================================================
+
+dialog:common:error:
+  description: Error dialog
+  components:
+    - type: icon
+      value: error
+
+    - type: text
+      label: Error
+
+    - type: button
+      label: OK
+      value: $dialog.close
+
+
+# =============================================================================
+# DIALOG WITH PROPS
+# =============================================================================
+
+dialog:common:confirm:
+  description: Confirmation dialog
+  props:
+    title: string
+    message: string
+    on_confirm: $action
+  components:
+    - type: text
+      value: props.title
+
+    - type: text
+      value: props.message
+
+    - type: button
+      label: Cancel
+      value: $dialog.close
+
+    - type: button
+      label: Confirm
+      value: props.on_confirm
+
+
+# =============================================================================
+# COMMON PATTERNS
+# =============================================================================
+
+# --- Success ---
+# dialog:common:success:
+#   props:
+#     message: string
+#   components:
+#     - type: icon
+#       value: checkmark
+#     - type: text
+#       value: props.message
+#     - type: button
+#       label: OK
+#       value: $dialog.close
+
+# --- Input Dialog ---
+# dialog:common:input:
+#   props:
+#     title: string
+#     on_submit: $action
+#   components:
+#     - type: text
+#       value: props.title
+#     - type: input
+#       label: Enter value
+#     - type: button
+#       label: Cancel
+#       value: $dialog.close
+#     - type: button
+#       label: Submit
+#       value: props.on_submit
+
+# --- Info with action ---
+# dialog:pools:you-won:
+#   components:
+#     - type: animation
+#       value: confetti
+#     - type: text
+#       label: Congratulations!
+#     - type: text
+#       label: You won the pool!
+#     - type: button
+#       label: Claim Reward
+#       value: $action.pools.claim-reward

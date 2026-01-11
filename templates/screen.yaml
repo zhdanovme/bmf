@@ -1,0 +1,187 @@
+# yaml-language-server: $schema=../schema.json
+# Screen Template
+# ID format: screen:epic:name
+#
+# =============================================================================
+# ПЕРЕИСПОЛЬЗОВАНИЕ КОМПОНЕНТОВ (YAML anchors)
+# =============================================================================
+#
+# components:epic:
+#   - &epic:header
+#     components: [...]
+#
+# screen:epic:main:
+#   components:
+#     - *epic:header                    # вставка
+#     - if: condition                   # условная вставка
+#       then: *epic:premium
+#
+
+# =============================================================================
+# LOCAL COMPONENTS (anchors)
+# =============================================================================
+components:myepic:
+  - &myepic:header
+    components:
+      - type: text
+        label: data.user.display_name
+      - type: image
+        value: data.user.avatar_url
+
+  - &myepic:stats
+    components:
+      - type: value
+        label: Level
+        value: data.user.level
+      - type: value
+        label: XP
+        value: data.user.total_xp
+
+  - &myepic:action-buttons
+    components:
+      - type: button
+        label: Start
+        value: $action.myepic.start
+      - type: button
+        label: Settings
+        value: $dialog:settings:main
+
+  - &myepic:premium-badge
+    components:
+      - type: image
+        value: premium-icon
+      - type: text
+        label: Premium Member
+
+  - &myepic:active-pool
+    components:
+      - type: image
+        value: pool-icon
+      - type: value
+        value: data.active_pool.ended_at
+      - type: button
+        label: Перейти
+        value: $action.pools.view-current
+
+
+# =============================================================================
+# SCREEN WITH LOCAL ANCHORS
+# =============================================================================
+
+screen:myepic:dashboard:
+  description: Dashboard с локальными компонентами
+  layout: $layout.global.main
+  data:
+    user: $context.current_user
+    active_pool: $context.active_pool
+  components:
+    - *myepic:header
+    - *myepic:stats
+    - if: data.active_pool != null
+      then: *myepic:active-pool
+    - *myepic:action-buttons
+
+
+# =============================================================================
+# SCREEN WITH CONDITIONAL COMPONENTS
+# =============================================================================
+
+screen:myepic:profile:
+  description: Profile с условными компонентами
+  layout: $layout.global.main
+  data:
+    user: $context.current_user
+  components:
+    - *myepic:header
+
+    # Условный компонент с if/then
+    - if: data.user.is_premium == true
+      then: *myepic:premium-badge
+
+    - *myepic:stats
+
+
+# =============================================================================
+# BASIC SCREEN (без anchors)
+# =============================================================================
+
+screen:myepic:simple:
+  description: Простой экран без переиспользования
+  layout: $layout.global.main
+  data:
+    user: $context.current_user
+  components:
+    - type: text
+      label: Screen Title
+
+    - type: button
+      label: Do Something
+      value: $action.myepic.do-something
+
+
+# =============================================================================
+# SCREEN WITH INPUT PARAM
+# =============================================================================
+
+screen:orders:details:
+  description: Order details
+  layout: $layout.global.main
+  data:
+    order_id: input uuid
+    order: query $entity.orders.order where id == data.order_id
+  components:
+    - type: value
+      label: Status
+      value: data.order.state
+
+    - type: value
+      label: Total
+      value: data.order.total
+
+
+# =============================================================================
+# ELEMENT TYPES REFERENCE
+# =============================================================================
+
+# TEXT - static label
+# - type: text
+#   label: Welcome
+
+# VALUE - dynamic from data/props
+# - type: value
+#   label: Balance
+#   value: data.user.balance
+
+# BUTTON - action
+# - type: button
+#   label: Submit
+#   value: $action.myepic.submit
+
+# BUTTON - conditional (inline if)
+# - type: button
+#   if: data.form.is_valid
+#   label: Submit
+#   value: $action.myepic.submit
+
+# CONDITIONAL COMPONENT (if/then with anchor)
+# - if: data.user.is_premium
+#   then: *myepic:premium-badge
+
+# IMAGE
+# - type: image
+#   value: data.user.avatar_url
+
+# LIST
+# - type: list
+#   value: for item of data.items
+#   components:
+#     - type: text
+#       label: item.name
+
+# INPUT
+# - type: input
+#   label: Email
+
+# TOGGLE
+# - type: toggle
+#   label: Enable notifications

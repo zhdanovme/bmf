@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=../schema.json
+# Layout Template
+# ID format: layout:epic:name
+
+# =============================================================================
+# MAIN LAYOUT (with navigation)
+# =============================================================================
+
+layout:global:main:
+  description: Main app layout with navigation
+  components:
+    - type: nav-item
+      label: Home
+      value: $action.nav.go-home
+
+    - type: nav-item
+      label: Orders
+      value: $action.nav.go-orders
+
+    - type: nav-item
+      label: Profile
+      value: $action.nav.go-profile
+
+
+# =============================================================================
+# FULLSCREEN LAYOUT (no navigation)
+# =============================================================================
+
+layout:global:fullscreen:
+  description: Fullscreen layout without navigation
+  components: []
+
+
+# =============================================================================
+# OTHER PATTERNS
+# =============================================================================
+
+# layout:global:auth:
+#   description: Auth flow layout
+#   components: []
+
+# layout:global:onboarding:
+#   description: Onboarding flow layout
+#   components: []
+
+# layout:global:admin:
+#   description: Admin panel layout
+#   components:
+#     - type: nav-item
+#       label: Dashboard
+#       value: $action.nav.go-admin-dashboard
+#     - type: nav-item
+#       label: Users
+#       value: $action.nav.go-admin-users

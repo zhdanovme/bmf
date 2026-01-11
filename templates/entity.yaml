@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=../schema.json
+# Entity Template
+# ID format: entity:epic:name
+
+# =============================================================================
+# BASIC ENTITY
+# =============================================================================
+
+entity:myepic:example:
+  description: Description
+  data:
+    id: uuid
+    name: string
+    count: 0
+    is_active: true
+    created_at: datetime
+
+
+# =============================================================================
+# COMMON PATTERNS
+# =============================================================================
+
+# --- User ---
+# entity:users:user:
+#   description: Application user
+#   data:
+#     id: uuid
+#     email: string
+#     name: string
+#     avatar_url: string
+#     role: user
+#     balance: 0
+
+# --- Notification ---
+# entity:notifications:notification:
+#   description: User notification
+#   data:
+#     id: uuid
+#     user_id: $entity.users.user
+#     type: string
+#     title: string
+#     message: string
+#     read: false

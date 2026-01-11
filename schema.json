@@ -1,0 +1,180 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "BMF Schema",
+  "description": "Behavior Markup Framework Schema",
+  "type": "object",
+  "definitions": {
+    "bml": {
+      "type": "string",
+      "description": "BML expression: $entity.x, query $entity.x where ..."
+    },
+    "component": {
+      "type": "object",
+      "properties": {
+        "if": { "$ref": "#/definitions/bml" },
+        "then": { "$ref": "#/definitions/component" },
+        "description": { "type": "string" },
+        "type": { "type": "string" },
+        "label": { "type": "string" },
+        "value": { "$ref": "#/definitions/bml" },
+        "components": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/component" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "effect": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/bml"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "if": {
+              "$ref": "#/definitions/bml"
+            },
+            "then": {
+              "oneOf": [
+                {
+                  "$ref": "#/definitions/effect"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/effect"
+                  }
+                }
+              ]
+            },
+            "else": {
+              "oneOf": [
+                {
+                  "$ref": "#/definitions/effect"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/effect"
+                  }
+                }
+              ]
+            }
+          },
+          "required": [
+            "if",
+            "then"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "actionProps": {
+      "type": "object",
+      "properties": {
+        "description": { "type": "string" },
+        "props": { "type": "object" },
+        "data": { "type": "object" },
+        "effects": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/effect" }
+        }
+      },
+      "required": ["effects"]
+    },
+    "baseProps": {
+      "type": "object",
+      "properties": {
+        "description": { "type": "string" },
+        "props": { "type": "object" },
+        "data": { "type": "object" },
+        "components": {
+          "type": "array",
+          "items": { "$ref": "#/definitions/component" }
+        }
+      }
+    },
+    "action": {
+      "allOf": [
+        { "$ref": "#/definitions/actionProps" },
+        {
+          "type": "object",
+          "properties": {
+            "description": true,
+            "props": true,
+            "data": true,
+            "effects": true
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "base": {
+      "allOf": [
+        { "$ref": "#/definitions/baseProps" },
+        {
+          "type": "object",
+          "properties": {
+            "description": true,
+            "props": true,
+            "data": true,
+            "components": true
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "event": {
+      "allOf": [
+        { "$ref": "#/definitions/actionProps" },
+        {
+          "type": "object",
+          "properties": {
+            "description": true,
+            "props": true,
+            "data": true,
+            "effects": true,
+            "to": { "$ref": "#/definitions/bml" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "screen": {
+      "allOf": [
+        { "$ref": "#/definitions/baseProps" },
+        {
+          "type": "object",
+          "properties": {
+            "description": true,
+            "props": true,
+            "data": true,
+            "components": true,
+            "layout": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  },
+  "patternProperties": {
+    "^action:[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+$": {
+      "$ref": "#/definitions/action"
+    },
+    "^event:[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+$": {
+      "$ref": "#/definitions/event"
+    },
+    "^screen:[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+$": {
+      "$ref": "#/definitions/screen"
+    },
+    "^components:[a-zA-Z0-9_-]+$": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/base" }
+    },
+    "^(?!action:|event:|screen:|components:)[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+:[a-zA-Z0-9_-]+$": {
+      "$ref": "#/definitions/base"
+    }
+  },
+  "additionalProperties": false
+}

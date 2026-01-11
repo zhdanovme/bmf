@@ -1,0 +1,88 @@
+# yaml-language-server: $schema=../schema.json
+# Event Template
+# ID format: event:epic:name
+#
+# Events = async notifications to OTHER users
+# Action → State → Event → Users
+
+# =============================================================================
+# EVENT TO SPECIFIC USER
+# =============================================================================
+
+event:myepic:user-notified:
+  description: Notify specific user
+  props:
+    user_id: uuid
+    message: string
+  to: props.user_id
+  effects:
+    - "$toast.info(message: props.message)"
+
+
+# =============================================================================
+# EVENT TO GROUP
+# =============================================================================
+
+event:rooms:updated:
+  description: Notify all users in room
+  props:
+    room_id: uuid
+  to: query users where active_room.room_id == props.room_id
+  effects:
+    - "$toast.info(message: Room updated)"
+
+
+# =============================================================================
+# BROADCAST (to all users)
+# =============================================================================
+
+event:system:maintenance:
+  description: Notify all users
+  props:
+    message: string
+  # no 'to' = broadcast
+  effects:
+    - "$dialog.maintenance(message: props.message)"
+
+
+# =============================================================================
+# EVENT WITH CONDITIONAL
+# =============================================================================
+
+event:pools:completed:
+  description: Pool finished
+  props:
+    pool_id: uuid
+    winner_id: uuid
+  to: query users where active_pool.pool_id == props.pool_id
+  effects:
+    - "$screen.pools.results(pool_id: props.pool_id)"
+    - if: $context.current_user_id == props.winner_id
+      then:
+        - $dialog.you-won
+      else:
+        - $toast.game-over
+
+
+# =============================================================================
+# COMMON PATTERNS
+# =============================================================================
+
+# --- User joined/left ---
+# event:rooms:user-joined:
+#   props:
+#     room_id: uuid
+#     user_name: string
+#   to: query users where active_room.room_id == props.room_id
+#   effects:
+#     - $toast.info { message: "{props.user_name} joined" }
+
+# --- Kicked ---
+# event:pools:kicked:
+#   props:
+#     user_id: uuid
+#     pool_id: uuid
+#   to: props.user_id
+#   effects:
+#     - $dialog.you-were-kicked
+#     - $screen.pools.list

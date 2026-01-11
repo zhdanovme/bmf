@@ -1,0 +1,108 @@
+# yaml-language-server: $schema=../schema.json
+# Action Template
+# ID format: action:epic:name
+
+# =============================================================================
+# BASIC ACTION
+# =============================================================================
+
+action:myepic:do-something:
+  description: What this action does
+  effects:
+    - $screen.myepic.result
+
+
+# =============================================================================
+# ACTION WITH PARAMS
+# =============================================================================
+
+action:orders:submit:
+  description: Submit order
+  props:
+    order_id: uuid
+  data:
+    order: query $entity.orders.order where id == props.order_id
+  effects:
+    - if: data.order.total > 0
+      then:
+        - data.order.status = submitted
+        - "$toast.success(message: Order submitted)"
+      else:
+        - $dialog.error
+
+
+# =============================================================================
+# EFFECT TYPES
+# =============================================================================
+
+# NAVIGATE TO SCREEN
+# - $screen.orders.list
+# - $screen.orders.details { order_id: data.order.id }
+
+# SHOW MODAL
+# - $dialog.confirm { title: Are you sure? }
+# - $dialog.error
+
+# SHOW TOAST
+# - $toast.success { message: Done! }
+# - $toast.info { message: Processing... }
+
+# CREATE ENTITY
+# - create $entity.orders.order { user_id: $context.current_user_id }
+
+# DELETE ENTITY
+# - delete data.item
+
+# SET VALUE
+# - data.order.total = 100
+# - $context.current_user.balance += 10
+
+# CHAIN ACTION
+# - $action.orders.refresh
+
+# EMIT EVENT
+# - $event.orders.submitted { user_id: data.order.user_id }
+
+# CONDITIONAL
+# - if: $context.current_user.balance < 100
+#   then:
+#     - $toast.error { message: Not enough balance }
+#   else:
+#     - $action.orders.pay
+
+
+# =============================================================================
+# COMMON PATTERNS
+# =============================================================================
+
+# --- Navigation ---
+# action:nav:go-home:
+#   description: Navigate to home
+#   effects:
+#     - $screen.home
+
+# action:nav:go-back:
+#   description: Navigate back
+#   effects:
+#     - $action.nav.go-home
+
+# --- Modal ---
+# action:common:close-dialog:
+#   description: Close current dialog
+#   effects:
+#     - $dialog.close
+
+# --- CRUD ---
+# action:orders:create:
+#   description: Create new order
+#   effects:
+#     - create $entity.orders.order { user_id: $context.current_user_id }
+#     - $screen.orders.checkout
+
+# action:orders:delete:
+#   description: Delete order
+#   props:
+#     order_id: uuid
+#   effects:
+#     - delete data.order
+#     - $toast.success { message: Deleted }
