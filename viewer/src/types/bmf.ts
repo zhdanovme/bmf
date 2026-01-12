@@ -29,6 +29,7 @@ export interface BmfEntity {
   epic: string;
   name: string;
   description?: string;
+  tags?: string[];
   components?: BmfComponent[];
   props?: Record<string, unknown>;
   data?: Record<string, unknown>;
@@ -49,10 +50,13 @@ export interface ParsedBmf {
   entities: Map<string, BmfEntity>;
   references: BmfReference[];
   epics: string[];
+  tags: string[];
   referencedIds: Set<string>;
 }
 
 // Graph types
+export type ReferenceStatus = 'connected' | 'hidden' | 'broken';
+
 export interface FlatComponent {
   id: string;
   type: string;
@@ -62,12 +66,26 @@ export interface FlatComponent {
   referenceType?: string;
 }
 
+export interface ReferenceInfo {
+  status: ReferenceStatus;
+  targetName?: string;
+  targetId?: string;
+  targetType?: string;
+}
+
+export interface HiddenRefInfo {
+  nodeId: string;
+  nodeName: string;
+  nodeType: string;
+}
+
 export interface BmfGraphNode {
   id: string;
   type: BmfEntityType;
   epic: string;
   name: string;
   description?: string;
+  tags: string[];
   components: FlatComponent[];
   hasComponents: boolean;
   isReferenced: boolean;

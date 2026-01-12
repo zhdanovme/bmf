@@ -145,8 +145,8 @@ test.describe('BMF Viewer', () => {
     const stats = page.locator('.stats');
     const statsText = await stats.textContent();
 
-    // Should show "X nodes / Y edges"
-    expect(statsText).toMatch(/\d+ nodes \/ \d+ edges/);
+    // Should show "X nodes (Y) / Z edges (W)"
+    expect(statsText).toMatch(/\d+ nodes \(\d+\) \/ \d+ edges \(\d+\)/);
   });
 
   test('reset button returns to welcome view', async ({ page }) => {
@@ -492,16 +492,6 @@ test.describe('BMF Viewer', () => {
     // Comment dialog should open
     await expect(page.locator('.comment-dialog')).toBeVisible();
     await expect(page.locator('.comment-dialog-header h3')).toContainText('Add Comment');
-  });
-
-  test('Import Comments button is visible in app header', async ({ page }) => {
-    await page.goto('/');
-    await page.waitForSelector('.welcome-view', { timeout: 10000 });
-    await loadSpec(page);
-    await page.waitForSelector('.react-flow__node', { timeout: 15000 });
-
-    // Import Comments button should be visible in header
-    await expect(page.locator('.import-comments-btn')).toBeVisible();
   });
 
   test('YAML viewer shows keyboard hint for adding comments', async ({ page }) => {

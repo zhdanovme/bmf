@@ -10,7 +10,6 @@ export function CommentDialog() {
   const addComment = useBmfStore((s) => s.addComment);
   const getComment = useBmfStore((s) => s.getComment);
   const removeComment = useBmfStore((s) => s.removeComment);
-  const exportCommentsYaml = useBmfStore((s) => s.exportCommentsYaml);
   const toggleResolve = useBmfStore((s) => s.toggleResolve);
   const addQuestion = useBmfStore((s) => s.addQuestion);
   const updateQuestionAnswer = useBmfStore((s) => s.updateQuestionAnswer);
@@ -88,19 +87,6 @@ export function CommentDialog() {
   const handleResolutionSave = () => {
     if (resolution.trim()) {
       setResolution(selectedNodeId, resolution.trim());
-    }
-  };
-
-  const handleExport = () => {
-    const yaml = exportCommentsYaml();
-    if (yaml) {
-      const blob = new Blob([yaml], { type: 'text/yaml' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = '_comments.yaml';
-      a.click();
-      URL.revokeObjectURL(url);
     }
   };
 
@@ -204,9 +190,6 @@ export function CommentDialog() {
               Delete
             </button>
           )}
-          <button className="comment-dialog-btn comment-dialog-export" onClick={handleExport}>
-            Export YAML
-          </button>
           <div className="comment-dialog-spacer" />
           <button className="comment-dialog-btn comment-dialog-cancel" onClick={closeCommentDialog}>
             Cancel

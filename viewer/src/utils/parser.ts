@@ -147,9 +147,10 @@ export function parseBmfYaml(yamlContent: string): ParsedBmf {
   const entities = new Map<string, BmfEntity>();
   const references: BmfReference[] = [];
   const epicsSet = new Set<string>();
+  const tagsSet = new Set<string>();
 
   if (!parsed || typeof parsed !== 'object') {
-    return { entities, references, epics: [], referencedIds: new Set() };
+    return { entities, references, epics: [], tags: [], referencedIds: new Set() };
   }
 
   // Process each top-level key
@@ -158,6 +159,7 @@ export function parseBmfYaml(yamlContent: string): ParsedBmf {
     if (!entityInfo || !value || typeof value !== 'object') return;
 
     const rawValue = value as Record<string, unknown>;
+    const entityTags = Array.isArray(rawValue.tags) ? rawValue.tags.filter((t): t is string => typeof t === 'string') : [];
 
     const entity: BmfEntity = {
       id: key,
@@ -165,6 +167,7 @@ export function parseBmfYaml(yamlContent: string): ParsedBmf {
       epic: entityInfo.epic,
       name: entityInfo.name,
       description: rawValue.description as string | undefined,
+      tags: entityTags,
       components: parseComponents(rawValue.components as unknown[] | undefined, key),
       props: rawValue.props as Record<string, unknown> | undefined,
       data: rawValue.data as Record<string, unknown> | undefined,
@@ -173,6 +176,9 @@ export function parseBmfYaml(yamlContent: string): ParsedBmf {
       to: rawValue.to as string | undefined,
       raw: rawValue,
     };
+
+    // Collect tags
+    entityTags.forEach(tag => tagsSet.add(tag));
 
     entities.set(key, entity);
 
@@ -194,6 +200,7 @@ export function parseBmfYaml(yamlContent: string): ParsedBmf {
     entities,
     references,
     epics: Array.from(epicsSet).sort(),
+    tags: Array.from(tagsSet).sort(),
     referencedIds,
   };
 }
@@ -205,6 +212,7 @@ export function parseBmfFiles(files: Map<string, string>): ParsedBmf {
   const allEntities = new Map<string, BmfEntity>();
   const allReferences: BmfReference[] = [];
   const allEpics = new Set<string>();
+  const allTags = new Set<string>();
 
   files.forEach((content) => {
     const parsed = parseBmfYaml(content);
@@ -213,6 +221,7 @@ export function parseBmfFiles(files: Map<string, string>): ParsedBmf {
     });
     allReferences.push(...parsed.references);
     parsed.epics.forEach(epic => allEpics.add(epic));
+    parsed.tags.forEach(tag => allTags.add(tag));
   });
 
   // Rebuild referenced IDs from all references
@@ -225,6 +234,7 @@ export function parseBmfFiles(files: Map<string, string>): ParsedBmf {
     entities: allEntities,
     references: allReferences,
     epics: Array.from(allEpics).sort(),
+    tags: Array.from(allTags).sort(),
     referencedIds,
   };
 }

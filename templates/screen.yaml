@@ -31,9 +31,6 @@ components:myepic:
   - &myepic:stats
     components:
       - type: value
-        label: Level
-        value: data.user.level
-      - type: value
         label: XP
         value: data.user.total_xp
 
@@ -61,7 +58,7 @@ components:myepic:
         value: data.active_pool.ended_at
       - type: button
         label: Перейти
-        value: $action.pools.view-current
+        value: "$screen:pools:details(pool_id: data.active_pool.id)"
 
 
 # =============================================================================

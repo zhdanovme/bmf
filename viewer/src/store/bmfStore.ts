@@ -43,10 +43,11 @@ function generateProjectId(path: string): string {
 interface StoredFilters {
   hiddenTypes: string[];
   hiddenEpics: string[];
+  hiddenTags: string[];
 }
 
 // Get filters from localStorage
-function getFiltersFromStorage(): { hiddenTypes: Set<string>; hiddenEpics: Set<string> } {
+function getFiltersFromStorage(): { hiddenTypes: Set<string>; hiddenEpics: Set<string>; hiddenTags: Set<string> } {
   try {
     const stored = localStorage.getItem(FILTERS_KEY);
     if (stored) {
@@ -54,20 +55,22 @@ function getFiltersFromStorage(): { hiddenTypes: Set<string>; hiddenEpics: Set<s
       return {
         hiddenTypes: new Set(parsed.hiddenTypes || []),
         hiddenEpics: new Set(parsed.hiddenEpics || []),
+        hiddenTags: new Set(parsed.hiddenTags || []),
       };
     }
   } catch {
     // Ignore parse errors
   }
-  return { hiddenTypes: new Set(), hiddenEpics: new Set() };
+  return { hiddenTypes: new Set(), hiddenEpics: new Set(), hiddenTags: new Set() };
 }
 
 // Save filters to localStorage
-function saveFiltersToStorage(hiddenTypes: Set<string>, hiddenEpics: Set<string>): void {
+function saveFiltersToStorage(hiddenTypes: Set<string>, hiddenEpics: Set<string>, hiddenTags: Set<string>): void {
   try {
     const data: StoredFilters = {
       hiddenTypes: Array.from(hiddenTypes),
       hiddenEpics: Array.from(hiddenEpics),
+      hiddenTags: Array.from(hiddenTags),
     };
     localStorage.setItem(FILTERS_KEY, JSON.stringify(data));
   } catch {
@@ -89,6 +92,12 @@ export interface Comment {
   questions?: QuestionAnswer[];
 }
 
+// Hovered filter for node highlighting
+export interface HoveredFilter {
+  category: 'type' | 'epic' | 'tag';
+  value: string;
+}
+
 interface BmfState {
   // Data
   loaded: boolean;
@@ -105,12 +114,17 @@ interface BmfState {
   selectedNodeId: string | null;
   connectedNodes: Set<string>;
   commentDialogOpen: boolean;
+  hoveredFilter: HoveredFilter | null;
+  searchOpen: boolean;
+  searchQuery: string;
 
   // Filter state
   hiddenTypes: Set<string>;
   hiddenEpics: Set<string>;
+  hiddenTags: Set<string>;
   availableTypes: string[];
   availableEpics: string[];
+  availableTags: string[];
 
   // Comments
   comments: Map<string, Comment>;
@@ -123,38 +137,45 @@ interface BmfState {
   selectNode: (nodeId: string | null) => void;
   toggleType: (type: string) => void;
   toggleEpic: (epic: string) => void;
+  toggleTag: (tag: string) => void;
+  setHoveredFilter: (filter: HoveredFilter | null) => void;
   openCommentDialog: () => void;
   closeCommentDialog: () => void;
+  openSearch: () => void;
+  closeSearch: () => void;
+  setSearchQuery: (query: string) => void;
   addComment: (entityId: string, text: string) => void;
   removeComment: (entityId: string) => void;
   toggleResolve: (entityId: string, resolved: boolean) => void;
   addQuestion: (entityId: string, question: string) => void;
   updateQuestionAnswer: (entityId: string, questionIndex: number, answer: string) => void;
   setResolution: (entityId: string, resolution: string) => void;
-  exportCommentsYaml: () => string;
-  importCommentsYaml: (yaml: string) => void;
   saveCommentsToFile: () => Promise<void>;
+  _exportCommentsYaml: () => string;
 
   // Getters
   getEntity: (id: string) => BmfEntity | undefined;
   getComment: (entityId: string) => Comment | undefined;
 }
 
-// Extract unique types and epics from graph nodes
-function extractFilters(graph: BmfGraph): { types: string[]; epics: string[] } {
+// Extract unique types, epics and tags from graph nodes
+function extractFilters(graph: BmfGraph): { types: string[]; epics: string[]; tags: string[] } {
   const types = new Set<string>();
   const epics = new Set<string>();
+  const tags = new Set<string>();
 
   graph.nodes.forEach((node) => {
     types.add(node.type);
     if (node.epic) {
       epics.add(node.epic);
     }
+    node.tags.forEach(tag => tags.add(tag));
   });
 
   return {
     types: Array.from(types).sort(),
     epics: Array.from(epics).sort(),
+    tags: Array.from(tags).sort(),
   };
 }
 
@@ -171,10 +192,15 @@ export const useBmfStore = create<BmfState>((set, get) => ({
   selectedNodeId: null,
   connectedNodes: new Set(),
   commentDialogOpen: false,
+  hoveredFilter: null,
+  searchOpen: false,
+  searchQuery: '',
   hiddenTypes: getFiltersFromStorage().hiddenTypes,
   hiddenEpics: getFiltersFromStorage().hiddenEpics,
+  hiddenTags: getFiltersFromStorage().hiddenTags,
   availableTypes: [],
   availableEpics: [],
+  availableTags: [],
   comments: new Map(),
 
   loadFromYaml: (content: string, fileName: string) => {
@@ -184,7 +210,7 @@ export const useBmfStore = create<BmfState>((set, get) => ({
       const parsed = parseBmfYaml(content);
       const graph = buildGraph(parsed);
       const projectId = generateProjectId(fileName);
-      const { types, epics } = extractFilters(graph);
+      const { types, epics, tags } = extractFilters(graph);
       const storedFilters = getFiltersFromStorage();
 
       // Update URL
@@ -202,8 +228,10 @@ export const useBmfStore = create<BmfState>((set, get) => ({
         connectedNodes: new Set(),
         hiddenTypes: storedFilters.hiddenTypes,
         hiddenEpics: storedFilters.hiddenEpics,
+        hiddenTags: storedFilters.hiddenTags,
         availableTypes: types,
         availableEpics: epics,
+        availableTags: tags,
       });
     } catch (e) {
       set({
@@ -220,7 +248,7 @@ export const useBmfStore = create<BmfState>((set, get) => ({
       const parsed = parseBmfFiles(files);
       const graph = buildGraph(parsed);
       const projectId = generateProjectId(folderPath);
-      const { types, epics } = extractFilters(graph);
+      const { types, epics, tags } = extractFilters(graph);
       const storedFilters = getFiltersFromStorage();
 
       // Load comments from _comments.yaml if present
@@ -263,8 +291,10 @@ export const useBmfStore = create<BmfState>((set, get) => ({
         connectedNodes: new Set(),
         hiddenTypes: storedFilters.hiddenTypes,
         hiddenEpics: storedFilters.hiddenEpics,
+        hiddenTags: storedFilters.hiddenTags,
         availableTypes: types,
         availableEpics: epics,
+        availableTags: tags,
         comments,
       });
     } catch (e) {
@@ -284,7 +314,7 @@ export const useBmfStore = create<BmfState>((set, get) => ({
     window.history.replaceState({}, '', window.location.pathname);
 
     // Clear stored filters
-    saveFiltersToStorage(new Set(), new Set());
+    saveFiltersToStorage(new Set(), new Set(), new Set());
 
     set({
       loaded: false,
@@ -300,8 +330,10 @@ export const useBmfStore = create<BmfState>((set, get) => ({
       connectedNodes: new Set(),
       hiddenTypes: new Set(),
       hiddenEpics: new Set(),
+      hiddenTags: new Set(),
       availableTypes: [],
       availableEpics: [],
+      availableTags: [],
       comments: new Map(),
     });
   },
@@ -326,27 +358,43 @@ export const useBmfStore = create<BmfState>((set, get) => ({
   },
 
   toggleType: (type: string) => {
-    const { hiddenTypes, hiddenEpics } = get();
+    const { hiddenTypes, hiddenEpics, hiddenTags } = get();
     const newHidden = new Set(hiddenTypes);
     if (newHidden.has(type)) {
       newHidden.delete(type);
     } else {
       newHidden.add(type);
     }
-    saveFiltersToStorage(newHidden, hiddenEpics);
+    saveFiltersToStorage(newHidden, hiddenEpics, hiddenTags);
     set({ hiddenTypes: newHidden });
   },
 
   toggleEpic: (epic: string) => {
-    const { hiddenTypes, hiddenEpics } = get();
+    const { hiddenTypes, hiddenEpics, hiddenTags } = get();
     const newHidden = new Set(hiddenEpics);
     if (newHidden.has(epic)) {
       newHidden.delete(epic);
     } else {
       newHidden.add(epic);
     }
-    saveFiltersToStorage(hiddenTypes, newHidden);
+    saveFiltersToStorage(hiddenTypes, newHidden, hiddenTags);
     set({ hiddenEpics: newHidden });
+  },
+
+  toggleTag: (tag: string) => {
+    const { hiddenTypes, hiddenEpics, hiddenTags } = get();
+    const newHidden = new Set(hiddenTags);
+    if (newHidden.has(tag)) {
+      newHidden.delete(tag);
+    } else {
+      newHidden.add(tag);
+    }
+    saveFiltersToStorage(hiddenTypes, hiddenEpics, newHidden);
+    set({ hiddenTags: newHidden });
+  },
+
+  setHoveredFilter: (filter: HoveredFilter | null) => {
+    set({ hoveredFilter: filter });
   },
 
   openCommentDialog: () => {
@@ -355,6 +403,18 @@ export const useBmfStore = create<BmfState>((set, get) => ({
 
   closeCommentDialog: () => {
     set({ commentDialogOpen: false });
+  },
+
+  openSearch: () => {
+    set({ searchOpen: true, searchQuery: '' });
+  },
+
+  closeSearch: () => {
+    set({ searchOpen: false, searchQuery: '' });
+  },
+
+  setSearchQuery: (query: string) => {
+    set({ searchQuery: query });
   },
 
   addComment: (entityId: string, text: string) => {
@@ -421,32 +481,7 @@ export const useBmfStore = create<BmfState>((set, get) => ({
     saveCommentsToFile();
   },
 
-  importCommentsYaml: (yaml: string) => {
-    const { saveCommentsToFile } = get();
-    try {
-      const parsed = YAML.parse(yaml) as Record<string, Comment>;
-      if (!parsed || typeof parsed !== 'object') return;
-
-      const newComments = new Map<string, Comment>();
-      Object.entries(parsed).forEach(([entityId, data]) => {
-        if (entityId.startsWith('#')) return;
-        newComments.set(entityId, {
-          entityId,
-          text: data.text || '',
-          createdAt: data.createdAt || Date.now(),
-          resolved: data.resolved || false,
-          resolution: data.resolution,
-          questions: data.questions,
-        });
-      });
-      set({ comments: newComments });
-      saveCommentsToFile();
-    } catch (e) {
-      console.error('Failed to import comments:', e);
-    }
-  },
-
-  exportCommentsYaml: () => {
+  _exportCommentsYaml: () => {
     const { comments } = get();
     if (comments.size === 0) return '';
 
@@ -486,14 +521,14 @@ export const useBmfStore = create<BmfState>((set, get) => ({
   },
 
   saveCommentsToFile: async () => {
-    const { directoryHandle, exportCommentsYaml } = get();
+    const { directoryHandle, _exportCommentsYaml } = get();
     if (!directoryHandle) {
       console.warn('No directory handle available for saving comments');
       return;
     }
 
     try {
-      const yamlContent = exportCommentsYaml();
+      const yamlContent = _exportCommentsYaml();
       // Always write the file, even if empty (creates file with headers only)
       const content = yamlContent || '# BMF Comments\n# Generated by BMF Viewer\n';
 

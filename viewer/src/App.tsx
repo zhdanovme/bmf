@@ -1,5 +1,6 @@
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, useMemo } from 'react';
 import { useBmfStore } from './store/bmfStore';
+import { NO_TAGS_FILTER } from './components/FilterOverlay';
 import { NavigationGraph } from './components/NavigationGraph';
 
 // File System Access API types (not yet in lib.dom.d.ts)
@@ -202,8 +203,9 @@ function AppContent() {
   const projectId = useBmfStore((s) => s.projectId);
   const reset = useBmfStore((s) => s.reset);
   const loadFromYaml = useBmfStore((s) => s.loadFromYaml);
-  const importCommentsYaml = useBmfStore((s) => s.importCommentsYaml);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const hiddenTypes = useBmfStore((s) => s.hiddenTypes);
+  const hiddenEpics = useBmfStore((s) => s.hiddenEpics);
+  const hiddenTags = useBmfStore((s) => s.hiddenTags);
 
   // Auto-load test data if available (for E2E tests)
   useEffect(() => {
@@ -213,22 +215,27 @@ function AppContent() {
     }
   }, [loaded, loadFromYaml]);
 
-  const handleImportComments = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Calculate visible counts based on filters
+  const { visibleNodes, visibleEdges } = useMemo(() => {
+    if (!graph) return { visibleNodes: 0, visibleEdges: 0 };
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      importCommentsYaml(content);
-    };
-    reader.readAsText(file);
+    const visibleNodeIds = new Set<string>();
+    graph.nodes.forEach((node) => {
+      const isTypeHidden = hiddenTypes.has(node.type);
+      const isEpicHidden = node.epic && hiddenEpics.has(node.epic);
+      const isTagHidden = node.tags.length > 0 && node.tags.some(tag => hiddenTags.has(tag));
+      const isNoTagsHidden = node.tags.length === 0 && hiddenTags.has(NO_TAGS_FILTER);
+      if (!isTypeHidden && !isEpicHidden && !isTagHidden && !isNoTagsHidden) {
+        visibleNodeIds.add(node.id);
+      }
+    });
 
-    // Reset input
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  }, [importCommentsYaml]);
+    const visibleEdgeCount = graph.edges.filter(
+      (edge) => visibleNodeIds.has(edge.source) && visibleNodeIds.has(edge.target)
+    ).length;
+
+    return { visibleNodes: visibleNodeIds.size, visibleEdges: visibleEdgeCount };
+  }, [graph, hiddenTypes, hiddenEpics, hiddenTags]);
 
   if (!loaded || !graph) {
     return <WelcomeView />;
@@ -241,22 +248,8 @@ function AppContent() {
         <span className="file-name">{fileName}</span>
         {projectId && <span className="project-id">#{projectId}</span>}
         <span className="stats">
-          {graph.nodes.length} nodes / {graph.edges.length} edges
+          {graph.nodes.length} nodes ({visibleNodes}) / {graph.edges.length} edges ({visibleEdges})
         </span>
-        <button
-          onClick={() => fileInputRef.current?.click()}
-          className="import-comments-btn"
-          title="Import comments from _comments.yaml"
-        >
-          Import Comments
-        </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".yaml,.yml"
-          onChange={handleImportComments}
-          style={{ display: 'none' }}
-        />
         <button onClick={reset} className="reset-btn">
           Load another file
         </button>

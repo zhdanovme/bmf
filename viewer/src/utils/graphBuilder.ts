@@ -187,6 +187,7 @@ export function buildGraph(parsed: ParsedBmf): BmfGraph {
       epic: entity.epic,
       name: entity.name,
       description: entity.description,
+      tags: entity.tags || [],
       components: flatComponents,
       hasComponents: (entity.components?.length ?? 0) > 0 || (entity.effects?.length ?? 0) > 0,
       isReferenced: parsed.referencedIds.has(id),

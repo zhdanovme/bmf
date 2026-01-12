@@ -44,6 +44,16 @@ export function getEpicColor(epic: string): string {
 }
 
 /**
+ * Get a deterministic color from a tag string
+ */
+export function getTagColor(tag: string): string {
+  if (!tag) return COLORS[0];
+  // Use a different offset to avoid same colors as epics
+  const index = (hashString(tag) + 5) % COLORS.length;
+  return COLORS[index];
+}
+
+/**
  * Get a lighter version of a color for backgrounds
  */
 export function getLightColor(color: string, opacity: number = 0.2): string {

@@ -1,5 +1,5 @@
 // Main navigation graph component using React Flow
-import { useMemo, useCallback, useState, useEffect } from 'react';
+import { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -18,11 +18,12 @@ import type { Node, Edge, EdgeProps } from '@xyflow/react';
 import ELK from 'elkjs/lib/elk.bundled.js';
 import '@xyflow/react/dist/style.css';
 
-import type { BmfGraph, BmfGraphNode } from '../types/bmf';
+import type { BmfGraph, BmfGraphNode, ReferenceInfo, HiddenRefInfo } from '../types/bmf';
 import { BmfNode } from './BmfNode';
 import { YamlViewer } from './YamlViewer';
-import { FilterOverlay } from './FilterOverlay';
+import { FilterOverlay, NO_TAGS_FILTER } from './FilterOverlay';
 import { CommentDialog } from './CommentDialog';
+import { SearchOverlay } from './SearchOverlay';
 import { useBmfStore } from '../store/bmfStore';
 import { getTypeColor } from '../utils/colorHash';
 
@@ -416,24 +417,55 @@ function NavigationGraphInner({ graph }: NavigationGraphProps) {
   const [isLayouting, setIsLayouting] = useState(false);
   const { fitView, getNodes, setCenter } = useReactFlow();
 
+  // Track the last layout key to detect when we need to re-layout vs just update data
+  const lastLayoutKeyRef = useRef<string | null>(null);
+
   const selectedNodeId = useBmfStore((s) => s.selectedNodeId);
   const connectedNodes = useBmfStore((s) => s.connectedNodes);
   const selectNode = useBmfStore((s) => s.selectNode);
   const hiddenTypes = useBmfStore((s) => s.hiddenTypes);
   const hiddenEpics = useBmfStore((s) => s.hiddenEpics);
+  const hiddenTags = useBmfStore((s) => s.hiddenTags);
+  const hoveredFilter = useBmfStore((s) => s.hoveredFilter);
   const openCommentDialog = useBmfStore((s) => s.openCommentDialog);
   const commentDialogOpen = useBmfStore((s) => s.commentDialogOpen);
   const comments = useBmfStore((s) => s.comments);
+  const openSearch = useBmfStore((s) => s.openSearch);
+  const searchOpen = useBmfStore((s) => s.searchOpen);
 
-  // Keyboard handler for 'C' to open comment dialog
+  // Navigate to node (center view on it)
+  const navigateToNode = useCallback((nodeId: string) => {
+    const rfNodes = getNodes();
+    const targetNode = rfNodes.find(n => n.id === nodeId);
+
+    if (targetNode) {
+      const nodeData = targetNode.data as unknown as BmfGraphNode;
+      const nodeHeight = calculateNodeHeight(nodeData);
+      const centerX = targetNode.position.x + NODE_WIDTH / 2;
+      const centerY = targetNode.position.y + nodeHeight / 2;
+      setCenter(centerX, centerY, { zoom: 1, duration: 500 });
+    }
+  }, [getNodes, setCenter]);
+
+  // Keyboard handler for 'C' to open comment dialog and Cmd+F for search
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if typing in an input
+      // Cmd+F or Ctrl+F opens search
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault();
+        if (!searchOpen) {
+          openSearch();
+        }
+        return;
+      }
+
+      // Don't trigger other shortcuts if typing in an input
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return;
       }
 
-      if ((e.key === 'c' || e.key === 'C') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      // Use e.code to check physical key (works with any keyboard layout)
+      if (e.code === 'KeyC' && !e.metaKey && !e.ctrlKey && !e.altKey) {
         if (selectedNodeId && !commentDialogOpen) {
           e.preventDefault();
           openCommentDialog();
@@ -443,7 +475,7 @@ function NavigationGraphInner({ graph }: NavigationGraphProps) {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedNodeId, commentDialogOpen, openCommentDialog]);
+  }, [selectedNodeId, commentDialogOpen, openCommentDialog, searchOpen, openSearch]);
 
   // Handle node title click (open YAML viewer)
   const handleTitleClick = useCallback((nodeId: string) => {
@@ -478,18 +510,128 @@ function NavigationGraphInner({ graph }: NavigationGraphProps) {
     selectNode(null);
   }, [selectNode]);
 
-  // Filter nodes based on hidden types/epics
+  // All node IDs in the graph (before filtering)
+  const allNodeIds = useMemo(() => {
+    return new Set(graph.nodes.map((node) => node.id));
+  }, [graph.nodes]);
+
+  // Node ID to node data map for quick lookup
+  const nodeById = useMemo(() => {
+    const map = new Map<string, BmfGraphNode>();
+    graph.nodes.forEach((node) => map.set(node.id, node));
+    return map;
+  }, [graph.nodes]);
+
+  // Filter nodes based on hidden types/epics/tags
   const visibleNodeIds = useMemo(() => {
     const visible = new Set<string>();
     graph.nodes.forEach((node) => {
       const isTypeHidden = hiddenTypes.has(node.type);
       const isEpicHidden = node.epic && hiddenEpics.has(node.epic);
-      if (!isTypeHidden && !isEpicHidden) {
+      // Hide if any of node's tags is in hiddenTags
+      const isTagHidden = node.tags.length > 0 && node.tags.some(tag => hiddenTags.has(tag));
+      // Hide if node has no tags and NO_TAGS_FILTER is hidden
+      const isNoTagsHidden = node.tags.length === 0 && hiddenTags.has(NO_TAGS_FILTER);
+      if (!isTypeHidden && !isEpicHidden && !isTagHidden && !isNoTagsHidden) {
         visible.add(node.id);
       }
     });
     return visible;
-  }, [graph.nodes, hiddenTypes, hiddenEpics]);
+  }, [graph.nodes, hiddenTypes, hiddenEpics, hiddenTags]);
+
+  // Compute reference info for each component (status: connected/hidden/broken)
+  const computeReferenceInfo = useCallback((node: BmfGraphNode): Map<string, ReferenceInfo> => {
+    const refInfo = new Map<string, ReferenceInfo>();
+
+    node.components.forEach((comp) => {
+      if (!comp.reference) return;
+
+      const targetId = comp.reference;
+
+      if (!allNodeIds.has(targetId)) {
+        // Target doesn't exist in graph - broken reference
+        refInfo.set(comp.id, { status: 'broken' });
+      } else if (!visibleNodeIds.has(targetId)) {
+        // Target exists but is hidden by filters
+        const targetNode = nodeById.get(targetId);
+        const targetName = targetNode?.name || targetId.split(':').pop() || targetId;
+        refInfo.set(comp.id, {
+          status: 'hidden',
+          targetName,
+          targetId,
+          targetType: targetNode?.type
+        });
+      } else {
+        // Target is visible and connected
+        const connectedNode = nodeById.get(targetId);
+        refInfo.set(comp.id, {
+          status: 'connected',
+          targetId,
+          targetType: connectedNode?.type
+        });
+      }
+    });
+
+    return refInfo;
+  }, [allNodeIds, visibleNodeIds, nodeById]);
+
+  // Handle click on hidden reference badge - select the hidden node and show YAML viewer
+  const handleHiddenReferenceClick = useCallback((targetId: string) => {
+    selectNode(targetId);
+  }, [selectNode]);
+
+  // Compute hidden references for each node (both incoming and outgoing)
+  const { incomingHiddenRefs, outgoingHiddenRefs } = useMemo(() => {
+    const incoming = new Map<string, HiddenRefInfo[]>(); // nodeId -> hidden nodes that reference it
+    const outgoing = new Map<string, HiddenRefInfo[]>(); // nodeId -> hidden targets it references
+
+    // For each node in the graph
+    graph.nodes.forEach((node) => {
+      const nodeIsVisible = visibleNodeIds.has(node.id);
+
+      // Check each component's reference
+      node.components.forEach((comp) => {
+        if (!comp.reference) return;
+        const targetId = comp.reference;
+
+        // Skip if target doesn't exist in graph
+        if (!allNodeIds.has(targetId)) return;
+
+        const targetIsVisible = visibleNodeIds.has(targetId);
+        const targetNode = nodeById.get(targetId);
+
+        if (nodeIsVisible && !targetIsVisible && targetNode) {
+          // Source is visible, target is hidden -> add to outgoing
+          if (!outgoing.has(node.id)) outgoing.set(node.id, []);
+          const existing = outgoing.get(node.id)!;
+          // Avoid duplicates
+          if (!existing.some(r => r.nodeId === targetId)) {
+            existing.push({
+              nodeId: targetId,
+              nodeName: targetNode.name || targetId.split(':').pop() || targetId,
+              nodeType: targetNode.type
+            });
+          }
+        }
+
+        if (!nodeIsVisible && targetIsVisible) {
+          // Source is hidden, target is visible -> add to incoming
+          if (!incoming.has(targetId)) incoming.set(targetId, []);
+          const existing = incoming.get(targetId)!;
+          // Avoid duplicates
+          if (!existing.some(r => r.nodeId === node.id)) {
+            existing.push({
+              nodeId: node.id,
+              nodeName: node.name || node.id.split(':').pop() || node.id,
+              nodeType: node.type
+            });
+          }
+        }
+      });
+    });
+
+    return { incomingHiddenRefs: incoming, outgoingHiddenRefs: outgoing };
+  }, [graph.nodes, visibleNodeIds, allNodeIds, nodeById]);
 
   // Build initial nodes and edges
   const { rawNodes, rawEdges } = useMemo(() => {
@@ -502,6 +644,10 @@ function NavigationGraphInner({ graph }: NavigationGraphProps) {
           ...node,
           onTitleClick: handleTitleClick,
           onReferenceClick: handleReferenceClick,
+          onHiddenReferenceClick: handleHiddenReferenceClick,
+          referenceInfo: computeReferenceInfo(node),
+          incomingHiddenRefs: incomingHiddenRefs.get(node.id) || [],
+          outgoingHiddenRefs: outgoingHiddenRefs.get(node.id) || [],
           hasComment: comments.has(node.id),
         },
         position: { x: 0, y: 0 },
@@ -535,13 +681,36 @@ function NavigationGraphInner({ graph }: NavigationGraphProps) {
       });
 
     return { rawNodes, rawEdges };
-  }, [graph, visibleNodeIds, handleTitleClick, handleReferenceClick, comments]);
+  }, [graph, visibleNodeIds, handleTitleClick, handleReferenceClick, handleHiddenReferenceClick, computeReferenceInfo, incomingHiddenRefs, outgoingHiddenRefs, comments]);
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
+  // Create a layout key that only changes when graph structure changes (not comments)
+  const layoutKey = useMemo(() => {
+    const nodeIds = rawNodes.map(n => n.id).sort().join(',');
+    const edgeIds = rawEdges.map(e => e.id).sort().join(',');
+    return `${nodeIds}|${edgeIds}`;
+  }, [rawNodes, rawEdges]);
+
   // Apply ELK layout
   useEffect(() => {
+    const needsLayout = lastLayoutKeyRef.current !== layoutKey;
+    const isInitialLayout = lastLayoutKeyRef.current === null;
+
+    if (!needsLayout) {
+      // Only update node data (e.g., hasComment changed), preserve positions
+      setNodes(prevNodes => {
+        const dataMap = new Map(rawNodes.map(n => [n.id, n.data]));
+        return prevNodes.map(node => ({
+          ...node,
+          data: dataMap.get(node.id) || node.data,
+        }));
+      });
+      return;
+    }
+
+    lastLayoutKeyRef.current = layoutKey;
     let cancelled = false;
     setIsLayouting(true);
 
@@ -551,8 +720,10 @@ function NavigationGraphInner({ graph }: NavigationGraphProps) {
           setNodes(layoutedNodes);
           setEdges(layoutedEdges);
           setIsLayouting(false);
-          // Fit view after layout
-          setTimeout(() => fitView({ padding: 0.2 }), 100);
+          // Only fit view on initial layout or when graph structure changes
+          if (isInitialLayout) {
+            setTimeout(() => fitView({ padding: 0.2 }), 100);
+          }
         }
       })
       .catch((err) => {
@@ -567,7 +738,7 @@ function NavigationGraphInner({ graph }: NavigationGraphProps) {
     return () => {
       cancelled = true;
     };
-  }, [rawNodes, rawEdges, setNodes, setEdges, fitView]);
+  }, [rawNodes, rawEdges, layoutKey, setNodes, setEdges, fitView]);
 
   // Generate dimming styles when a node is selected
   const dimmingStyles = useMemo(() => {
@@ -593,14 +764,76 @@ function NavigationGraphInner({ graph }: NavigationGraphProps) {
     return css;
   }, [selectedNodeId, connectedNodes, graph]);
 
+  // Generate dimming styles when hovering over a filter
+  const filterHoverStyles = useMemo(() => {
+    if (!hoveredFilter) return '';
+
+    // Find nodes that DON'T match the hovered filter
+    const nonMatchingNodes = graph.nodes.filter(n => {
+      // Only consider visible nodes
+      if (!visibleNodeIds.has(n.id)) return false;
+
+      if (hoveredFilter.category === 'type') {
+        return n.type !== hoveredFilter.value;
+      } else if (hoveredFilter.category === 'epic') {
+        return n.epic !== hoveredFilter.value;
+      } else if (hoveredFilter.category === 'tag') {
+        // Special case for "no tags" filter
+        if (hoveredFilter.value === NO_TAGS_FILTER) {
+          return n.tags.length > 0; // Dim nodes that HAVE tags
+        }
+        return !n.tags.includes(hoveredFilter.value);
+      }
+      return false;
+    });
+
+    if (nonMatchingNodes.length === 0) return '';
+
+    const nodeSelectors = nonMatchingNodes
+      .map(n => `.react-flow__node[data-id="${n.id}"]`)
+      .join(', ');
+
+    // Also dim edges that don't connect to matching nodes
+    const matchingNodeIds = new Set(
+      graph.nodes
+        .filter(n => visibleNodeIds.has(n.id) && !nonMatchingNodes.some(nm => nm.id === n.id))
+        .map(n => n.id)
+    );
+
+    const nonMatchingEdges = graph.edges.filter(e =>
+      visibleNodeIds.has(e.source) &&
+      visibleNodeIds.has(e.target) &&
+      !matchingNodeIds.has(e.source) &&
+      !matchingNodeIds.has(e.target)
+    );
+
+    const edgeSelectors = nonMatchingEdges
+      .map(e => `.react-flow__edge[data-id="${e.id}"]`)
+      .join(', ');
+
+    let css = '';
+    if (nodeSelectors) {
+      css += `${nodeSelectors} { opacity: 0.2; filter: saturate(0.3); transition: opacity 0.15s ease, filter 0.15s ease; }\n`;
+    }
+    if (edgeSelectors) {
+      css += `${edgeSelectors} { opacity: 0.15; transition: opacity 0.15s ease; }\n`;
+    }
+    return css;
+  }, [hoveredFilter, graph, visibleNodeIds]);
+
   // Handle node click
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
     selectNode(node.id);
   }, [selectNode]);
 
+  // Handle node drag start - select node when dragging begins
+  const onNodeDragStart = useCallback((_: React.MouseEvent, node: Node) => {
+    selectNode(node.id);
+  }, [selectNode]);
+
   return (
     <div className="navigation-graph">
-      {dimmingStyles && <style>{dimmingStyles}</style>}
+      {(dimmingStyles || filterHoverStyles) && <style>{dimmingStyles}{filterHoverStyles}</style>}
 
       <ReactFlow
         nodes={nodes}
@@ -610,6 +843,7 @@ function NavigationGraphInner({ graph }: NavigationGraphProps) {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={onNodeClick}
+        onNodeDragStart={onNodeDragStart}
         connectionLineType={ConnectionLineType.Bezier}
         fitView
         fitViewOptions={{ padding: 0.2 }}
@@ -635,6 +869,9 @@ function NavigationGraphInner({ graph }: NavigationGraphProps) {
 
       {/* Filter Overlay */}
       <FilterOverlay />
+
+      {/* Search Overlay */}
+      <SearchOverlay onNavigateToNode={navigateToNode} />
 
       {/* YAML Viewer panel */}
       {selectedNodeId && (
