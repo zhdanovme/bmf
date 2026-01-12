@@ -695,6 +695,12 @@ function NavigationGraphInner({ graph }: NavigationGraphProps) {
 
   // Apply ELK layout
   useEffect(() => {
+    // Skip if no nodes to layout
+    if (rawNodes.length === 0) {
+      setIsLayouting(false);
+      return;
+    }
+
     const needsLayout = lastLayoutKeyRef.current !== layoutKey;
     const isInitialLayout = lastLayoutKeyRef.current === null;
 
@@ -710,13 +716,14 @@ function NavigationGraphInner({ graph }: NavigationGraphProps) {
       return;
     }
 
-    lastLayoutKeyRef.current = layoutKey;
     let cancelled = false;
     setIsLayouting(true);
 
     getClusteredLayout(rawNodes, rawEdges)
       .then(({ nodes: layoutedNodes, edges: layoutedEdges }) => {
         if (!cancelled) {
+          // Only update lastLayoutKeyRef after successful layout
+          lastLayoutKeyRef.current = layoutKey;
           setNodes(layoutedNodes);
           setEdges(layoutedEdges);
           setIsLayouting(false);
