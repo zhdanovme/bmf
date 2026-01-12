@@ -19,7 +19,8 @@
 # =============================================================================
 
 entity:users:user:
-  text: "Need to add email validation"
+  text: |
+    Need to add email validation
   createdAt: 1704067200000
   resolved: false
 
@@ -29,10 +30,12 @@ entity:users:user:
 # =============================================================================
 
 screen:home:main:
-  text: "Missing loading state"
+  text: |
+    Missing loading state
   createdAt: 1704067200000
   resolved: true
-  resolution: "Added loading component in commit abc123"
+  resolution: |
+    Added loading component in commit abc123
 
 
 # =============================================================================
@@ -40,13 +43,17 @@ screen:home:main:
 # =============================================================================
 
 action:orders:submit:
-  text: "Review payment flow"
+  text: |
+    Review payment flow
   createdAt: 1704067200000
   resolved: false
   questions:
-    - question: "Should we add retry logic for failed payments?"
-      answer: "Yes, max 3 retries with exponential backoff"
-    - question: "What about partial refunds?"
+    - question: |
+        Should we add retry logic for failed payments?
+      answer: |
+        Yes, max 3 retries with exponential backoff
+    - question: |
+        What about partial refunds?
 
 
 # =============================================================================
@@ -54,13 +61,16 @@ action:orders:submit:
 # =============================================================================
 
 # entity:pools:pool:
-#   text: "Consider adding pool size limits"
+#   text: |
+#     Consider adding pool size limits
 #   createdAt: 1704067200000
 #   resolved: false
 
 # component:common:user-card:
-#   text: "Needs accessibility improvements"
+#   text: |
+#     Needs accessibility improvements
 #   createdAt: 1704067200000
 #   resolved: false
 #   questions:
-#     - question: "Which ARIA attributes to add?"
+#     - question: |
+#         Which ARIA attributes to add?
