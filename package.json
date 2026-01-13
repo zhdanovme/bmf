@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "validate": "tsx utils/validate.ts",
+    "validate": "tsx utils/validate-schema.ts",
     "check-refs": "tsx utils/check-references.ts"
   },
   "dependencies": {

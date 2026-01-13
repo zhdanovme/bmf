@@ -148,6 +148,7 @@
             "effects": true,
             "to": { "$ref": "#/definitions/bml" }
           },
+          "required": ["to"],
           "additionalProperties": false
         }
       ]
