@@ -528,8 +528,8 @@ function NavigationGraphInner({ graph }: NavigationGraphProps) {
     graph.nodes.forEach((node) => {
       const isTypeHidden = hiddenTypes.has(node.type);
       const isEpicHidden = node.epic && hiddenEpics.has(node.epic);
-      // Hide if any of node's tags is in hiddenTags
-      const isTagHidden = node.tags.length > 0 && node.tags.some(tag => hiddenTags.has(tag));
+      // Hide only if ALL of node's tags are hidden (show if at least one tag is visible)
+      const isTagHidden = node.tags.length > 0 && node.tags.every(tag => hiddenTags.has(tag));
       // Hide if node has no tags and NO_TAGS_FILTER is hidden
       const isNoTagsHidden = node.tags.length === 0 && hiddenTags.has(NO_TAGS_FILTER);
       if (!isTypeHidden && !isEpicHidden && !isTagHidden && !isNoTagsHidden) {

@@ -1,50 +1,193 @@
 // Filter overlay component for toggling type, epic, and tag visibility
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useBmfStore, type HoveredFilter } from '../store/bmfStore';
 import { getTypeColor, getEpicColor, getTagColor } from '../utils/colorHash';
+
+const EXPANDED_GROUPS_KEY = 'bmf-viewer-expanded-tag-groups';
 
 // Special tag for entities without tags
 export const NO_TAGS_FILTER = '_no_tags';
 
-// Group tags by prefix (before colon)
-interface TagGroup {
-  name: string;
-  tags: string[];
+// Tree node for hierarchical tag display
+interface TagTreeNode {
+  prefix: string; // Full prefix path (e.g., "A:B:C")
+  label: string; // Display label (e.g., "C")
+  children: TagTreeNode[];
+  leafTags: string[]; // Direct leaf tags under this node
 }
 
-function groupTagsByPrefix(tags: string[]): TagGroup[] {
-  const groups = new Map<string, string[]>();
+function buildTagTree(tags: string[]): { roots: TagTreeNode[]; ungrouped: string[] } {
+  const nodeMap = new Map<string, TagTreeNode>();
   const ungrouped: string[] = [];
 
+  // First pass: identify all unique prefixes and their parent relationships
   tags.forEach((tag) => {
-    const colonIndex = tag.indexOf(':');
-    if (colonIndex > 0) {
-      const prefix = tag.substring(0, colonIndex);
-      if (!groups.has(prefix)) {
-        groups.set(prefix, []);
-      }
-      groups.get(prefix)!.push(tag);
-    } else {
+    const parts = tag.split(':');
+    if (parts.length === 1) {
       ungrouped.push(tag);
+      return;
+    }
+
+    // Create/update nodes for each prefix level
+    for (let i = 1; i < parts.length; i++) {
+      const prefix = parts.slice(0, i).join(':');
+      if (!nodeMap.has(prefix)) {
+        nodeMap.set(prefix, {
+          prefix,
+          label: parts[i - 1],
+          children: [],
+          leafTags: [],
+        });
+      }
+    }
+
+    // Add tag as leaf to its direct parent prefix
+    const parentPrefix = parts.slice(0, -1).join(':');
+    const node = nodeMap.get(parentPrefix);
+    if (node) {
+      node.leafTags.push(tag);
     }
   });
 
-  const result: TagGroup[] = [];
-
-  // Add grouped tags first
-  groups.forEach((groupTags, name) => {
-    result.push({ name, tags: groupTags.sort() });
+  // Second pass: build parent-child relationships
+  nodeMap.forEach((node, prefix) => {
+    const parts = prefix.split(':');
+    if (parts.length > 1) {
+      const parentPrefix = parts.slice(0, -1).join(':');
+      const parent = nodeMap.get(parentPrefix);
+      if (parent) {
+        parent.children.push(node);
+      }
+    }
   });
 
-  // Sort groups alphabetically
-  result.sort((a, b) => a.name.localeCompare(b.name));
+  // Get root nodes (single-level prefixes)
+  const roots: TagTreeNode[] = [];
+  nodeMap.forEach((node, prefix) => {
+    if (!prefix.includes(':')) {
+      roots.push(node);
+    }
+  });
 
-  // Add ungrouped tags at the end
-  if (ungrouped.length > 0) {
-    result.push({ name: '', tags: ungrouped.sort() });
-  }
+  // Sort everything
+  const sortNodes = (nodes: TagTreeNode[]) => {
+    nodes.sort((a, b) => a.prefix.localeCompare(b.prefix));
+    nodes.forEach((node) => {
+      node.leafTags.sort();
+      sortNodes(node.children);
+    });
+  };
+  sortNodes(roots);
+  ungrouped.sort();
 
-  return result;
+  return { roots, ungrouped };
+}
+
+// Recursive component to render a tag tree node
+function TagTreeNodeComponent({
+  node,
+  depth,
+  expandedGroups,
+  toggleGroup,
+  toggleAllInPrefix,
+  hiddenTags,
+  toggleTag,
+  availableTags,
+  handleMouseEnter,
+  handleMouseLeave,
+}: {
+  node: TagTreeNode;
+  depth: number;
+  expandedGroups: Set<string>;
+  toggleGroup: (prefix: string) => void;
+  toggleAllInPrefix: (prefix: string) => void;
+  hiddenTags: Set<string>;
+  toggleTag: (tag: string) => void;
+  availableTags: string[];
+  handleMouseEnter: (category: HoveredFilter['category'], value: string, isHidden: boolean) => void;
+  handleMouseLeave: () => void;
+}) {
+  const isExpanded = expandedGroups.has(node.prefix);
+  const hasContent = node.children.length > 0 || node.leafTags.length > 0;
+
+  // Check all tags under this prefix
+  const matchingTags = availableTags.filter((tag) => tag.startsWith(node.prefix + ':'));
+  const allHidden = matchingTags.length > 0 && matchingTags.every((tag) => hiddenTags.has(tag));
+  const someHidden = matchingTags.some((tag) => hiddenTags.has(tag));
+  const groupColor = getTagColor(node.prefix);
+
+  if (!hasContent) return null;
+
+  return (
+    <div className="filter-tag-tree-node" style={{ marginLeft: depth > 0 ? 12 : 0 }}>
+      <div className="filter-group-header">
+        <button
+          className="filter-group-toggle"
+          onClick={() => toggleGroup(node.prefix)}
+          title={isExpanded ? 'Collapse group' : 'Expand group'}
+        >
+          {isExpanded ? '▼' : '▶'}
+        </button>
+        <button
+          className={`filter-group-name ${allHidden ? 'filter-group-hidden' : ''} ${someHidden && !allHidden ? 'filter-group-partial' : ''}`}
+          style={{
+            borderColor: groupColor,
+            backgroundColor: allHidden ? 'transparent' : `${groupColor}33`,
+          }}
+          onClick={() => toggleAllInPrefix(node.prefix)}
+          title={allHidden ? `Show all ${node.prefix}:*` : `Hide all ${node.prefix}:*`}
+        >
+          {node.label}:
+        </button>
+      </div>
+      {isExpanded && (
+        <div className="filter-tag-tree-content">
+          {/* Render child nodes first */}
+          {node.children.map((child) => (
+            <TagTreeNodeComponent
+              key={child.prefix}
+              node={child}
+              depth={depth + 1}
+              expandedGroups={expandedGroups}
+              toggleGroup={toggleGroup}
+              toggleAllInPrefix={toggleAllInPrefix}
+              hiddenTags={hiddenTags}
+              toggleTag={toggleTag}
+              availableTags={availableTags}
+              handleMouseEnter={handleMouseEnter}
+              handleMouseLeave={handleMouseLeave}
+            />
+          ))}
+          {/* Render leaf tags */}
+          {node.leafTags.length > 0 && (
+            <div className="filter-badges" style={{ marginLeft: 12 }}>
+              {node.leafTags.map((tag) => {
+                const isHidden = hiddenTags.has(tag);
+                const color = getTagColor(tag);
+                const displayName = tag.substring(node.prefix.length + 1);
+                return (
+                  <button
+                    key={tag}
+                    className={`filter-badge ${isHidden ? 'filter-badge-hidden' : ''}`}
+                    style={{
+                      backgroundColor: isHidden ? 'transparent' : color,
+                      borderColor: color,
+                    }}
+                    onClick={() => toggleTag(tag)}
+                    onMouseEnter={() => handleMouseEnter('tag', tag, isHidden)}
+                    onMouseLeave={handleMouseLeave}
+                    title={isHidden ? `Show ${tag}` : `Hide ${tag}`}
+                  >
+                    {displayName}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function FilterOverlay() {
@@ -59,35 +202,60 @@ export function FilterOverlay() {
   const toggleTag = useBmfStore((s) => s.toggleTag);
   const setHoveredFilter = useBmfStore((s) => s.setHoveredFilter);
 
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
-
-  const tagGroups = groupTagsByPrefix(availableTags);
-
-  const handleMouseEnter = useCallback((category: HoveredFilter['category'], value: string, isHidden: boolean) => {
-    if (!isHidden) {
-      setHoveredFilter({ category, value });
+  // Store expanded groups (collapsed by default)
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(EXPANDED_GROUPS_KEY);
+      if (saved) {
+        return new Set(JSON.parse(saved));
+      }
+    } catch {
+      // ignore
     }
-  }, [setHoveredFilter]);
+    return new Set();
+  });
+
+  // Persist expanded groups to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem(EXPANDED_GROUPS_KEY, JSON.stringify([...expandedGroups]));
+    } catch {
+      // ignore
+    }
+  }, [expandedGroups]);
+
+  const { roots: tagTreeRoots, ungrouped: ungroupedTags } = buildTagTree(availableTags);
+
+  const handleMouseEnter = useCallback(
+    (category: HoveredFilter['category'], value: string, isHidden: boolean) => {
+      if (!isHidden) {
+        setHoveredFilter({ category, value });
+      }
+    },
+    [setHoveredFilter]
+  );
 
   const handleMouseLeave = useCallback(() => {
     setHoveredFilter(null);
   }, [setHoveredFilter]);
 
-  const toggleGroup = (groupName: string) => {
-    setCollapsedGroups((prev) => {
+  const toggleGroup = (prefix: string) => {
+    setExpandedGroups((prev) => {
       const next = new Set(prev);
-      if (next.has(groupName)) {
-        next.delete(groupName);
+      if (next.has(prefix)) {
+        next.delete(prefix);
       } else {
-        next.add(groupName);
+        next.add(prefix);
       }
       return next;
     });
   };
 
-  const toggleAllInGroup = (tags: string[]) => {
-    const allHidden = tags.every((tag) => hiddenTags.has(tag));
-    tags.forEach((tag) => {
+  const toggleAllInPrefix = (prefix: string) => {
+    // Find all tags that start with this prefix
+    const matchingTags = availableTags.filter((tag) => tag.startsWith(prefix + ':'));
+    const allHidden = matchingTags.every((tag) => hiddenTags.has(tag));
+    matchingTags.forEach((tag) => {
       const isHidden = hiddenTags.has(tag);
       if (allHidden && isHidden) {
         toggleTag(tag);
@@ -113,15 +281,17 @@ export function FilterOverlay() {
   };
 
   const toggleAllTags = () => {
-    const allHidden = availableTags.every((t) => hiddenTags.has(t));
-    availableTags.forEach((t) => {
+    // Include NO_TAGS_FILTER in the "all tags" toggle
+    const allTagsWithNoTags = [...availableTags, NO_TAGS_FILTER];
+    const allHidden = allTagsWithNoTags.every((t) => hiddenTags.has(t));
+    allTagsWithNoTags.forEach((t) => {
       if (allHidden === hiddenTags.has(t)) toggleTag(t);
     });
   };
 
   const allTypesHidden = availableTypes.every((t) => hiddenTypes.has(t));
   const allEpicsHidden = availableEpics.every((e) => hiddenEpics.has(e));
-  const allTagsHidden = availableTags.every((t) => hiddenTags.has(t));
+  const allTagsHidden = [...availableTags, NO_TAGS_FILTER].every((t) => hiddenTags.has(t));
 
   if (availableTypes.length === 0 && availableEpics.length === 0 && availableTags.length === 0) {
     return null;
@@ -233,64 +403,47 @@ export function FilterOverlay() {
               );
             })()}
           </div>
-          {tagGroups.map((group) => {
-            const isCollapsed = collapsedGroups.has(group.name);
-            const allHidden = group.tags.every((tag) => hiddenTags.has(tag));
-            const someHidden = group.tags.some((tag) => hiddenTags.has(tag));
-            const groupColor = group.name ? getTagColor(group.name) : undefined;
-
-            return (
-              <div key={group.name || '_ungrouped'} className="filter-tag-group">
-                {group.name && (
-                  <div className="filter-group-header">
-                    <button
-                      className="filter-group-toggle"
-                      onClick={() => toggleGroup(group.name)}
-                      title={isCollapsed ? 'Expand group' : 'Collapse group'}
-                    >
-                      {isCollapsed ? '▶' : '▼'}
-                    </button>
-                    <button
-                      className={`filter-group-name ${allHidden ? 'filter-group-hidden' : ''} ${someHidden && !allHidden ? 'filter-group-partial' : ''}`}
-                      style={{
-                        borderColor: groupColor,
-                        backgroundColor: allHidden ? 'transparent' : `${groupColor}33`,
-                      }}
-                      onClick={() => toggleAllInGroup(group.tags)}
-                      title={allHidden ? `Show all ${group.name}:*` : `Hide all ${group.name}:*`}
-                    >
-                      {group.name}:
-                    </button>
-                  </div>
-                )}
-                {!isCollapsed && (
-                  <div className="filter-badges">
-                    {group.tags.map((tag) => {
-                      const isHidden = hiddenTags.has(tag);
-                      const color = getTagColor(tag);
-                      const displayName = group.name ? tag.substring(group.name.length + 1) : tag;
-                      return (
-                        <button
-                          key={tag}
-                          className={`filter-badge ${isHidden ? 'filter-badge-hidden' : ''}`}
-                          style={{
-                            backgroundColor: isHidden ? 'transparent' : color,
-                            borderColor: color,
-                          }}
-                          onClick={() => toggleTag(tag)}
-                          onMouseEnter={() => handleMouseEnter('tag', tag, isHidden)}
-                          onMouseLeave={handleMouseLeave}
-                          title={isHidden ? `Show ${tag}` : `Hide ${tag}`}
-                        >
-                          {displayName}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {/* Render tag tree */}
+          {tagTreeRoots.map((root) => (
+            <TagTreeNodeComponent
+              key={root.prefix}
+              node={root}
+              depth={0}
+              expandedGroups={expandedGroups}
+              toggleGroup={toggleGroup}
+              toggleAllInPrefix={toggleAllInPrefix}
+              hiddenTags={hiddenTags}
+              toggleTag={toggleTag}
+              availableTags={availableTags}
+              handleMouseEnter={handleMouseEnter}
+              handleMouseLeave={handleMouseLeave}
+            />
+          ))}
+          {/* Render ungrouped tags */}
+          {ungroupedTags.length > 0 && (
+            <div className="filter-badges">
+              {ungroupedTags.map((tag) => {
+                const isHidden = hiddenTags.has(tag);
+                const color = getTagColor(tag);
+                return (
+                  <button
+                    key={tag}
+                    className={`filter-badge ${isHidden ? 'filter-badge-hidden' : ''}`}
+                    style={{
+                      backgroundColor: isHidden ? 'transparent' : color,
+                      borderColor: color,
+                    }}
+                    onClick={() => toggleTag(tag)}
+                    onMouseEnter={() => handleMouseEnter('tag', tag, isHidden)}
+                    onMouseLeave={handleMouseLeave}
+                    title={isHidden ? `Show ${tag}` : `Hide ${tag}`}
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
     </div>

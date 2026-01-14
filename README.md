@@ -2,22 +2,23 @@
 
 A specification format for defining mobile app business logic, screens, entities, and workflows.
 
-## Prerequisites
-
-- **Node.js** >= 18.x
-- **npm** >= 9.x
-- **Browser**: Chrome, Edge, or Opera (for File System Access API support)
-
 ## Project Structure
 
 ```
 bmf/
 ├── viewer/           # React-based BMF viewer application
 ├── bmfs/             # BMF specification projects
+│   ├── template/     # BMF templates and examples
+│   │   ├── *.yaml        # Entity templates (action, screen, entity, etc.)
+│   │   ├── _epics.yaml   # Epic template
+│   │   ├── _test-cases.yaml  # Test case template
+│   │   └── _comments.yaml    # Comments template
 │   └── {project}/    # Individual project specs
-│       ├── *.yaml    # Spec files (entities, screens, actions, etc.)
-│       └── _comments.yaml  # Comments for spec review
-├── templates/        # BMF templates and examples
+│       ├── *.yaml           # Spec files (entities, screens, actions, etc.)
+│       ├── _epics.yaml      # Feature epics
+│       ├── _test-cases.yaml # Test scenarios
+│       └── _comments.yaml   # Comments for spec review
+├── utils/            # Utility scripts for BMF management
 └── .claude/
     └── commands/     # Claude Code slash commands
 ```
@@ -52,12 +53,12 @@ npm run preview
 
 ## Claude Code Commands
 
-### `/bmf-comments {project}`
+### `/bmf.comments {project}`
 
 Review and resolve comments in a BMF specification.
 
 ```bash
-/bmf-comments jumpster
+/bmf.comments marketplace
 ```
 
 **Behavior:**
@@ -72,6 +73,52 @@ Review and resolve comments in a BMF specification.
 
 - Summary of total/resolved/open comments
 - Resolution notes for each processed comment
+
+### `/bmf.create-epics {folder} [lang]`
+
+Generate `_epics.yaml` for a BMF project by analyzing its YAML structure.
+
+```bash
+/bmf.create-epics bmfs/examples/marketplace
+/bmf.create-epics bmfs/myproject ru
+```
+
+**Behavior:**
+
+- Analyzes all `.yaml` files in the specified folder
+- Groups entities by domain (epic namespace)
+- Generates epic descriptions based on entity content
+- Creates subepics for domains with 3+ related entities
+- Supports multiple languages (`en`, `ru`)
+
+**Output:**
+
+- Creates `{folder}/_epics.yaml` with epic definitions
+- Summary of epics created by domain
+
+### `/bmf.create-tcs {folder} [lang]`
+
+Generate test cases (`_test-cases.yaml`) from epics and tag entities with `tc:*` markers.
+
+```bash
+/bmf.create-tcs bmfs/examples/marketplace
+/bmf.create-tcs bmfs/myproject ru
+```
+
+**Behavior:**
+
+- Requires `_epics.yaml` to exist (run `/bmf.create-epics` first)
+- Cleans existing `tc:*` tags before generating new ones
+- Analyzes entity relationships and navigation flows
+- Generates happy path, edge case, and alternative path scenarios
+- Tags entities with `tc:epic:scenario`, `tc:epic:scenario:start`, `tc:epic:scenario:end`
+- Runs coverage check to ensure all required entities are covered
+
+**Output:**
+
+- Creates/updates `{folder}/_test-cases.yaml`
+- Tags entities in spec files with `tc:*` markers
+- Coverage report showing covered/uncovered entities
 
 ## Comments System
 
@@ -118,6 +165,57 @@ BMF specs use YAML files organized by entity type:
 - `context.yaml` - Global app context and triggers
 - `actors.yaml` - User roles and permissions
 
+## Utilities
+
+Command-line utilities for BMF management. All utilities are run with `npx ts-node`.
+
+### `validate-schema.ts`
+
+Validate BMF spec files against the JSON schema.
+
+```bash
+npx ts-node utils/validate-schema.ts bmfs/{project}
+```
+
+### `check-references.ts`
+
+Check for broken references between entities.
+
+```bash
+npx ts-node utils/check-references.ts bmfs/{project}
+```
+
+### `check-tcs.ts`
+
+Check test case coverage. Reports which entities are covered by `tc:*` tags and which are missing coverage.
+
+```bash
+npx ts-node utils/check-tcs.ts bmfs/{project}
+```
+
+**Output:**
+
+- Summary of test cases defined
+- Coverage by entity type (screen, dialog, action, event)
+- List of uncovered required entities (must be fixed)
+- List of orphan `tc:*` tags (referencing undefined test cases)
+
+### `delete-tc-tags.ts`
+
+Remove all `tc:*` tags from entity files. Useful for regenerating test case coverage from scratch.
+
+```bash
+npx ts-node utils/delete-tc-tags.ts bmfs/{project}
+```
+
+### `tag-entities.ts`
+
+Apply predefined test case tags to entities. Contains hardcoded mappings of test case IDs to entity tags.
+
+```bash
+npx ts-node utils/tag-entities.ts bmfs/{project}
+```
+
 ## Development
 
 ### Viewer Tech Stack
@@ -134,11 +232,4 @@ BMF specs use YAML files organized by entity type:
 cd viewer
 npm test
 npm run test:e2e
-```
-
-### Type Checking
-
-```bash
-cd viewer
-npm run typecheck
 ```

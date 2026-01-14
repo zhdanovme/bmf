@@ -8,6 +8,7 @@
 
 layout:global:main:
   description: Main app layout with navigation
+  tags: [stage:mvp]
   components:
     - type: nav-item
       label: Home
@@ -28,6 +29,7 @@ layout:global:main:
 
 layout:global:fullscreen:
   description: Fullscreen layout without navigation
+  tags: [stage:v1]
   components: []
 
 

@@ -8,6 +8,7 @@
 
 dialog:common:error:
   description: Error dialog
+  tags: [stage:mvp]
   components:
     - type: icon
       value: error
@@ -26,6 +27,7 @@ dialog:common:error:
 
 dialog:common:confirm:
   description: Confirmation dialog
+  tags: [stage:v1]
   props:
     title: string
     message: string

@@ -11,6 +11,7 @@
 
 event:myepic:user-notified:
   description: Notify specific user
+  tags: [stage:design]
   props:
     user_id: uuid
     message: string
@@ -25,6 +26,7 @@ event:myepic:user-notified:
 
 event:rooms:updated:
   description: Notify all users in room
+  tags: [stage:mvp]
   props:
     room_id: uuid
   to: query users where active_room.room_id == props.room_id
@@ -38,6 +40,7 @@ event:rooms:updated:
 
 event:system:maintenance:
   description: Notify all users
+  tags: [stage:v1]
   props:
     message: string
   # no 'to' = broadcast
@@ -51,6 +54,7 @@ event:system:maintenance:
 
 event:pools:completed:
   description: Pool finished
+  tags: [stage:backlog]
   props:
     pool_id: uuid
     winner_id: uuid

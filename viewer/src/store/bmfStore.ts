@@ -14,11 +14,17 @@ interface FileSystemDirectoryHandle {
   name: string;
   kind: 'directory';
   getFileHandle(name: string, options?: { create?: boolean }): Promise<FileSystemFileHandle>;
+  values(): AsyncIterable<FileSystemHandle>;
 }
 
-interface FileSystemFileHandle {
+interface FileSystemHandle {
   name: string;
+  kind: 'file' | 'directory';
+}
+
+interface FileSystemFileHandle extends FileSystemHandle {
   kind: 'file';
+  getFile(): Promise<File>;
   createWritable(): Promise<FileSystemWritableFileStream>;
 }
 
@@ -27,16 +33,31 @@ interface FileSystemWritableFileStream extends WritableStream {
   close(): Promise<void>;
 }
 
-// Generate project ID from path
-function generateProjectId(path: string): string {
-  // Simple hash of the path
-  let hash = 0;
-  for (let i = 0; i < path.length; i++) {
-    const char = path.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
+// Recursively read all YAML files from a directory handle
+async function readYamlFilesFromHandle(
+  dirHandle: FileSystemDirectoryHandle,
+  basePath: string = ''
+): Promise<Map<string, string>> {
+  const files = new Map<string, string>();
+
+  for await (const entry of dirHandle.values()) {
+    const entryPath = basePath ? `${basePath}/${entry.name}` : entry.name;
+
+    if (entry.kind === 'file') {
+      if (entry.name.endsWith('.yaml') || entry.name.endsWith('.yml')) {
+        const fileHandle = entry as FileSystemFileHandle;
+        const file = await fileHandle.getFile();
+        const content = await file.text();
+        files.set(entryPath, content);
+      }
+    } else if (entry.kind === 'directory') {
+      const subHandle = entry as unknown as FileSystemDirectoryHandle;
+      const subFiles = await readYamlFilesFromHandle(subHandle, entryPath);
+      subFiles.forEach((content, path) => files.set(path, content));
+    }
   }
-  return Math.abs(hash).toString(36);
+
+  return files;
 }
 
 // Filter storage types
@@ -104,8 +125,6 @@ interface BmfState {
   loading: boolean;
   error: string | null;
   fileName: string | null;
-  projectId: string | null;
-  projectPath: string | null;
   parsed: ParsedBmf | null;
   graph: BmfGraph | null;
   directoryHandle: FileSystemDirectoryHandle | null;
@@ -131,7 +150,8 @@ interface BmfState {
 
   // Actions
   loadFromYaml: (content: string, fileName: string) => void;
-  loadFromFiles: (files: Map<string, string>, folderName: string, folderPath: string, dirHandle?: FileSystemDirectoryHandle) => void;
+  loadFromFiles: (files: Map<string, string>, folderName: string, dirHandle?: FileSystemDirectoryHandle) => void;
+  refreshFolder: () => Promise<void>;
   setDirectoryHandle: (handle: FileSystemDirectoryHandle | null) => void;
   reset: () => void;
   selectNode: (nodeId: string | null) => void;
@@ -184,8 +204,6 @@ export const useBmfStore = create<BmfState>((set, get) => ({
   loading: false,
   error: null,
   fileName: null,
-  projectId: null,
-  projectPath: null,
   parsed: null,
   graph: null,
   directoryHandle: null,
@@ -209,7 +227,6 @@ export const useBmfStore = create<BmfState>((set, get) => ({
     try {
       const parsed = parseBmfYaml(content);
       const graph = buildGraph(parsed);
-      const projectId = generateProjectId(fileName);
       const { types, epics, tags } = extractFilters(graph);
       const storedFilters = getFiltersFromStorage();
 
@@ -219,15 +236,10 @@ export const useBmfStore = create<BmfState>((set, get) => ({
       // For tags, also allow _no_tags special filter
       const validHiddenTags = new Set([...storedFilters.hiddenTags].filter(t => t === '_no_tags' || tags.includes(t)));
 
-      // Update URL
-      window.history.replaceState({}, '', `?project=${projectId}`);
-
       set({
         loaded: true,
         loading: false,
         fileName,
-        projectId,
-        projectPath: fileName,
         parsed,
         graph,
         selectedNodeId: null,
@@ -247,13 +259,12 @@ export const useBmfStore = create<BmfState>((set, get) => ({
     }
   },
 
-  loadFromFiles: (files: Map<string, string>, folderName: string, folderPath: string, dirHandle?: FileSystemDirectoryHandle) => {
+  loadFromFiles: (files: Map<string, string>, folderName: string, dirHandle?: FileSystemDirectoryHandle) => {
     set({ loading: true, error: null });
 
     try {
       const parsed = parseBmfFiles(files);
       const graph = buildGraph(parsed);
-      const projectId = generateProjectId(folderPath);
       const { types, epics, tags } = extractFilters(graph);
       const storedFilters = getFiltersFromStorage();
 
@@ -287,15 +298,10 @@ export const useBmfStore = create<BmfState>((set, get) => ({
         }
       }
 
-      // Update URL
-      window.history.replaceState({}, '', `?project=${projectId}`);
-
       set({
         loaded: true,
         loading: false,
         fileName: folderName,
-        projectId,
-        projectPath: folderPath,
         parsed,
         graph,
         directoryHandle: dirHandle || null,
@@ -321,10 +327,79 @@ export const useBmfStore = create<BmfState>((set, get) => ({
     set({ directoryHandle: handle });
   },
 
-  reset: () => {
-    // Clear URL
-    window.history.replaceState({}, '', window.location.pathname);
+  refreshFolder: async () => {
+    const { directoryHandle, fileName } = get();
+    if (!directoryHandle || !fileName) {
+      console.warn('No directory handle available for refresh');
+      return;
+    }
 
+    set({ loading: true, error: null });
+
+    try {
+      const files = await readYamlFilesFromHandle(directoryHandle);
+
+      if (files.size === 0) {
+        set({ loading: false, error: 'No YAML files found in the folder.' });
+        return;
+      }
+
+      const parsed = parseBmfFiles(files);
+      const graph = buildGraph(parsed);
+      const { types, epics, tags } = extractFilters(graph);
+      const storedFilters = getFiltersFromStorage();
+
+      // Filter stored hidden values to only include those that exist in current graph
+      const validHiddenTypes = new Set([...storedFilters.hiddenTypes].filter(t => types.includes(t)));
+      const validHiddenEpics = new Set([...storedFilters.hiddenEpics].filter(e => epics.includes(e)));
+      const validHiddenTags = new Set([...storedFilters.hiddenTags].filter(t => t === '_no_tags' || tags.includes(t)));
+
+      // Load comments from _comments.yaml if present
+      let comments = new Map<string, Comment>();
+      const commentsContent = files.get(COMMENTS_FILENAME);
+      if (commentsContent) {
+        try {
+          const parsedComments = YAML.parse(commentsContent) as { comments?: Array<{ ref: string; text: string; createdAt: number; resolved: boolean; resolution?: string; questions?: QuestionAnswer[] }> };
+          if (parsedComments && parsedComments.comments && Array.isArray(parsedComments.comments)) {
+            parsedComments.comments.forEach((data) => {
+              if (!data.ref) return;
+              comments.set(data.ref, {
+                entityId: data.ref,
+                text: data.text || '',
+                createdAt: data.createdAt || Date.now(),
+                resolved: data.resolved || false,
+                resolution: data.resolution,
+                questions: data.questions,
+              });
+            });
+          }
+        } catch {
+          console.warn('Failed to parse _comments.yaml');
+        }
+      }
+
+      // Refresh data but preserve view state (selectedNodeId stays the same)
+      set({
+        loading: false,
+        parsed,
+        graph,
+        hiddenTypes: validHiddenTypes,
+        hiddenEpics: validHiddenEpics,
+        hiddenTags: validHiddenTags,
+        availableTypes: types,
+        availableEpics: epics,
+        availableTags: tags,
+        comments,
+      });
+    } catch (e) {
+      set({
+        loading: false,
+        error: e instanceof Error ? e.message : 'Failed to refresh files',
+      });
+    }
+  },
+
+  reset: () => {
     // Clear stored filters
     saveFiltersToStorage(new Set(), new Set(), new Set());
 
@@ -333,8 +408,6 @@ export const useBmfStore = create<BmfState>((set, get) => ({
       loading: false,
       error: null,
       fileName: null,
-      projectId: null,
-      projectPath: null,
       parsed: null,
       graph: null,
       directoryHandle: null,

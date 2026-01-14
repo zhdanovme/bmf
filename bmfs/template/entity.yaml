@@ -8,6 +8,7 @@
 
 entity:myepic:example:
   description: Description
+  tags: [stage:design]
   data:
     id: uuid
     name: string

@@ -1,0 +1,284 @@
+# yaml-language-server: $schema=../schema.json
+# BMF Template Reference
+#
+# Этот файл описывает все сущности BMF-спецификации.
+# Каждый тип сущности хранится в отдельном файле.
+
+
+# =============================================================================
+# CUSTOM ENTITIES — создание своих типов сущностей
+# =============================================================================
+#
+# Помимо встроенных типов (screen, action, evnt и т.д.) можно создавать
+# свои кастомные сущности. Любой ID формата typee:epic:name, где type НЕ является
+# зарезервированным (action, event, screen, components), использует base-схему.
+#
+# BASE SCHEMA (schema.json#/definitions/base):
+#   - description: string     — описание сущности
+#   - tags: string[]          — теги для фильтрации
+#   - props: object           — входные параметры
+#   - data: object            — данные/поля
+#   - components: component[] — UI-компоненты
+#
+# ПРИМЕРЫ КАСТОМНЫХ СУЩНОСТЕЙ:
+#
+#   # Документация
+#   doc:api:authentication:
+#     description: API authentication guide
+#     tags: [category:backend]
+#     data:
+#       endpoints: ["/login", "/logout", "/refresh"]
+#
+#   # Роли и права
+#   role:system:admin:
+#     description: Administrator role
+#     data:
+#       permissions: [read, write, delete, manage]
+#
+#   # Feature flags
+#   feature:experiment:dark-mode:
+#     description: Dark mode experiment
+#     tags: [stage:beta]
+#     data:
+#       rollout: 10%
+#       enabled_for: [premium, beta-testers]
+#
+# ЗАРЕЗЕРВИРОВАННЫЕ ПРЕФИКСЫ (имеют специальную схему):
+#   - action:*:*   — actionProps (effects вместо components)
+#   - event:*:*    — actionProps + to
+#   - screen:*:*   — baseProps + layout
+#   - components:* — массив base (для YAML anchors)
+
+
+# =============================================================================
+# CORE ENTITIES — основные сущности приложения
+# =============================================================================
+
+main:
+  description: |
+    Корневая сущность проекта — общее описание приложения.
+    Содержит метаданные, цели и высокоуровневый обзор продукта.
+
+    ID формат: main:project:name
+    Файл: main.yaml (этот файл)
+
+    Рекомендуемые поля в data:
+      - name: название приложения
+      - version: версия спецификации
+      - description: описание продукта
+      - goals: бизнес-цели
+      - target_audience: целевая аудитория
+
+    ENTRY POINT:
+      Дефолтная входная точка BMF-приложения:
+      action:main:app-entry
+
+      Это action, который вызывается при запуске приложения.
+      Обычно содержит навигацию на начальный экран или
+      логику выбора экрана (auth vs main).
+
+screen:
+  description: |
+    Экраны приложения — полноэкранные UI-состояния.
+    Определяют layout, data-binding и набор компонентов.
+
+    ID формат: screen:epic:name
+    Файл: screen.yaml
+
+    Ключевые поля:
+      - layout: шаблон (ссылка на layout:*)
+      - data: привязка данных из context/entity
+      - components: список UI-элементов
+
+dialog:
+  description: |
+    Модальные окна — диалоги поверх текущего экрана.
+    Используются для подтверждений, ошибок, форм ввода.
+
+    ID формат: dialog:epic:name
+    Файл: dialog.yaml
+
+    Ключевые поля:
+      - props: входные параметры
+      - components: содержимое диалога
+
+    Специальные действия:
+      - $dialog.close — закрыть текущий диалог
+
+component:
+  description: |
+    Переиспользуемые UI-компоненты — YAML anchors для вставки в screens/dialogs.
+    Позволяют избежать дублирования и создавать консистентный UI.
+
+    ID формат: components:epic (группа anchors)
+    Файл: component.yaml
+
+    Особенности:
+      - Определяются как &anchor-name
+      - Вставляются через *anchor-name
+      - Поддерживают props через data binding
+
+action:
+  description: |
+    Действия — обработчики событий с побочными эффектами.
+    Навигация, мутации данных, показ уведомлений.
+
+    ID формат: action:epic:name
+    Файл: action.yaml
+
+    Ключевые поля:
+      - props: входные параметры
+      - data: локальные данные для effects
+      - effects: список побочных эффектов
+
+    Типы эффектов:
+      - $screen.* — навигация
+      - $dialog.* — показ модалки
+      - $toast.* — уведомление
+      - $action.* — вызов другого action
+      - $event.* — отправка события
+      - create/delete — CRUD операции
+      - assignment — изменение значений
+
+entity:
+  description: |
+    Модели данных — схемы хранимых объектов.
+    Определяют структуру данных приложения.
+
+    ID формат: entity:epic:name
+    Файл: entity.yaml
+
+    Ключевые поля:
+      - data: поля сущности с типами/значениями по умолчанию
+
+    Типы полей:
+      - uuid, string, datetime — примитивы
+      - 0, true/false — значения по умолчанию
+      - $entity:* — ссылка на другую сущность
+
+event:
+  description: |
+    События — асинхронные уведомления другим пользователям.
+    Используются для real-time обновлений и пушей.
+
+    ID формат: event:epic:name
+    Файл: event.yaml
+
+    Ключевые поля:
+      - props: параметры события
+      - to: получатели (query или конкретный user_id)
+      - effects: что происходит у получателей
+
+    Паттерны доставки:
+      - to: props.user_id — конкретный пользователь
+      - to: query ... — группа по условию
+      - без to — broadcast всем
+
+context:
+  description: |
+    Глобальный контекст — singleton-состояние сессии.
+    Хранит текущего пользователя и computed-запросы.
+
+    ID формат: context:global:main
+    Файл: context.yaml
+
+    Использование:
+      - $context.current_user — текущий пользователь
+      - $context.* — любые глобальные значения
+
+layout:
+  description: |
+    Шаблоны layout — структура страницы с навигацией.
+    Определяют общий каркас для группы экранов.
+
+    ID формат: layout:epic:name
+    Файл: layout.yaml
+
+    Ключевые поля:
+      - components: элементы навигации (nav-item)
+
+    Типичные layouts:
+      - layout:global:main — с навигацией
+      - layout:global:fullscreen — без навигации
+
+
+# =============================================================================
+# META ENTITIES — служебные сущности (файлы с префиксом _)
+# =============================================================================
+
+epic:
+  description: |
+    Эпики — высокоуровневые группы функциональности.
+    Описывают бизнес-цели и ценность для пользователя.
+
+    ID формат: epic:domain или epic:domain:subdomain
+    Файл: _epics.yaml
+
+    Назначение:
+      - Навигация по продукту
+      - Планирование и приоритизация
+      - Связь tc:* сценариев с бизнес-целями
+
+tc:
+  description: |
+    Test Cases — пошаговые сценарии использования.
+    Описывают путь пользователя от входа до результата.
+
+    ID формат: tc:domain:scenario-name
+    Файл: _test-cases.yaml
+
+    Связь с сущностями через теги:
+      - tc:X:Y:start — входная точка
+      - tc:X:Y — промежуточный шаг
+      - tc:X:Y:end — финальная точка
+
+test:
+  description: |
+    Декларативные тесты — автоматизированные проверки.
+    Описывают состояние, точки входа/выхода, покрытие.
+
+    ID формат: test:epic:scenario-name
+    Файл: _tests.yaml
+
+    Ключевые поля:
+      - context: начальное состояние
+      - entry: стартовая точка
+      - exit: ожидаемый результат
+      - covers: покрываемые элементы
+
+comments:
+  description: |
+    Комментарии — ревью-заметки к сущностям.
+    Используются для обсуждения спецификации.
+
+    Файл: _comments.yaml
+
+    Ключевые поля:
+      - ref: ID сущности
+      - text: текст комментария
+      - resolved: статус
+      - questions: Q&A тред
+
+
+# =============================================================================
+# COMMON FIELDS — общие поля для всех сущностей
+# =============================================================================
+
+common:
+  description: |
+    Поля, общие для большинства сущностей:
+
+    - description: текстовое описание
+    - tags: метки для фильтрации и группировки
+      - stage:design|mvp|v1|backlog|done — этап разработки
+      - tc:* — связь с test cases
+      - priority:* — приоритет
+
+    Ссылки на сущности:
+    - $screen.epic.name — экран
+    - $dialog.epic.name — диалог
+    - $action.epic.name — действие
+    - $entity.epic.name — сущность
+    - $context.field — глобальный контекст
+    - $layout.epic.name — layout
+    - $event.epic.name — событие

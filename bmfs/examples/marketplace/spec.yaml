@@ -1,0 +1,1334 @@
+# yaml-language-server: $schema=../../../schema.json
+# BMF Example: Online Marketplace with Personal Account
+# Simple e-commerce application specification
+
+# =============================================================================
+# CONTEXT
+# =============================================================================
+
+context:
+  attributes:
+    user_id: uuid
+    user: query $entity.users.user where id == user_id
+    cart_items: query $entity.cart.item where user_id == user_id
+    cart_total: 0.0
+    is_authenticated: false
+
+
+# =============================================================================
+# ENTITIES
+# =============================================================================
+
+entity:users:user:
+  description: Registered user
+  tags: [core]
+  attributes:
+    id: uuid
+    email: string
+    name: string
+    phone: string
+    avatar_url: string
+    created_at: datetime
+
+entity:users:address:
+  description: User delivery address
+  tags: [core]
+  attributes:
+    id: uuid
+    user_id: $entity.users.user
+    title: string
+    city: string
+    street: string
+    building: string
+    apartment: string
+    postal_code: string
+    is_default: false
+
+entity:catalog:category:
+  description: Product category
+  tags: [catalog]
+  attributes:
+    id: uuid
+    name: string
+    slug: string
+    image_url: string
+    parent_id: $entity.catalog.category
+    sort_order: 0
+
+entity:catalog:product:
+  description: Product in catalog
+  tags: [catalog]
+  attributes:
+    id: uuid
+    name: string
+    slug: string
+    description: string
+    price: 0.0
+    old_price: 0.0
+    image_url: string
+    category_id: $entity.catalog.category
+    in_stock: true
+    stock_qty: 0
+    rating: 0.0
+    reviews_count: 0
+
+entity:cart:item:
+  description: Item in shopping cart
+  tags: [cart]
+  attributes:
+    id: uuid
+    user_id: $entity.users.user
+    product_id: $entity.catalog.product
+    quantity: 1
+    added_at: datetime
+
+entity:orders:order:
+  description: Customer order
+  tags: [orders]
+  attributes:
+    id: uuid
+    user_id: $entity.users.user
+    address_id: $entity.users.address
+    status: pending
+    items_total: 0.0
+    delivery_cost: 0.0
+    total: 0.0
+    created_at: datetime
+    updated_at: datetime
+
+entity:orders:order-item:
+  description: Item in order
+  tags: [orders]
+  attributes:
+    id: uuid
+    order_id: $entity.orders.order
+    product_id: $entity.catalog.product
+    quantity: 1
+    price: 0.0
+    total: 0.0
+
+
+# =============================================================================
+# LAYOUTS
+# =============================================================================
+
+layout:main:
+  description: Main layout with navigation
+  components:
+    - id: nav_home
+      type: nav-item
+      label: Home
+      action: $screen.shop.home
+
+    - id: nav_catalog
+      type: nav-item
+      label: Catalog
+      action: $screen.catalog.categories
+
+    - id: nav_cart
+      type: nav-item
+      label: Cart
+      action: $screen.cart.view
+
+    - id: nav_profile
+      type: nav-item
+      label: Profile
+      action: $screen.account.profile
+
+layout:auth:
+  description: Layout for auth screens (no nav)
+  components: []
+
+layout:checkout:
+  description: Checkout layout with back button
+  components:
+    - id: back
+      type: button
+      label: Back to Cart
+      action: $screen.cart.view
+
+
+# =============================================================================
+# LOCAL COMPONENTS (anchors)
+# =============================================================================
+
+components:shop:
+  - &shop:product-card
+    description: Product card for lists
+    props:
+      product: $entity.catalog.product
+    components:
+      - id: image
+        type: image
+        value: props.product.image_url
+
+      - id: name
+        type: value
+        value: props.product.name
+
+      - id: price
+        type: value
+        label: Price
+        value: props.product.price
+
+      - if: props.product.old_price > props.product.price
+        then:
+          - id: old_price
+            type: value
+            label: Was
+            value: props.product.old_price
+
+      - id: view_btn
+        type: button
+        label: View
+        action: "$screen.catalog.product(product_id: props.product.id)"
+
+      - id: add_btn
+        type: button
+        label: Add to Cart
+        action: "$action.cart.add(product_id: props.product.id)"
+
+  - &shop:cart-item
+    description: Cart item row
+    props:
+      item: $entity.cart.item
+      product: $entity.catalog.product
+    components:
+      - id: image
+        type: image
+        value: props.product.image_url
+
+      - id: name
+        type: value
+        value: props.product.name
+
+      - id: price
+        type: value
+        value: props.product.price
+
+      - id: qty
+        type: stepper
+        label: Qty
+        value: props.item.quantity
+        action: "$action.cart.update-qty(item_id: props.item.id, quantity: value)"
+
+      - id: remove
+        type: button
+        label: Remove
+        action: "$action.cart.remove(item_id: props.item.id)"
+
+      - id: subtotal
+        type: value
+        label: Subtotal
+        value: props.product.price * props.item.quantity
+
+  - &shop:order-row
+    description: Order row for history
+    props:
+      order: $entity.orders.order
+    components:
+      - id: order_id
+        type: value
+        label: Order
+        value: props.order.id
+
+      - id: date
+        type: value
+        label: Date
+        value: props.order.created_at
+
+      - id: status
+        type: value
+        label: Status
+        value: props.order.status
+
+      - id: total
+        type: value
+        label: Total
+        value: props.order.total
+
+      - id: view_btn
+        type: button
+        label: Details
+        action: "$screen.account.order-details(order_id: props.order.id)"
+
+
+# =============================================================================
+# SCREENS - SHOP
+# =============================================================================
+
+screen:shop:home:
+  description: Home page with featured products
+  tags: [stage:mvp]
+  layout: $layout.main
+  data:
+    categories: query $entity.catalog.category where parent_id == null
+    featured: query $entity.catalog.product where in_stock == true limit 8
+  components:
+    - id: hero
+      type: text
+      label: Welcome to our Shop
+
+    - id: categories_title
+      type: text
+      label: Categories
+
+    - id: categories_list
+      type: list
+      value: for category of data.categories
+      components:
+        - id: cat_image
+          type: image
+          value: category.image_url
+        - id: cat_name
+          type: value
+          value: category.name
+        - id: cat_btn
+          type: button
+          label: Browse
+          action: "$screen.catalog.products(category_id: category.id)"
+
+    - id: featured_title
+      type: text
+      label: Featured Products
+
+    - id: featured_list
+      type: component
+      value: "$component.shop.product-card(product: product of data.featured)"
+
+
+# =============================================================================
+# SCREENS - CATALOG
+# =============================================================================
+
+screen:catalog:categories:
+  description: All categories
+  tags: [stage:mvp]
+  layout: $layout.main
+  data:
+    categories: query $entity.catalog.category
+  components:
+    - id: title
+      type: text
+      label: Categories
+
+    - id: list
+      type: list
+      value: for category of data.categories
+      components:
+        - id: image
+          type: image
+          value: category.image_url
+        - id: name
+          type: value
+          value: category.name
+        - id: browse
+          type: button
+          label: Browse
+          action: "$screen.catalog.products(category_id: category.id)"
+
+screen:catalog:products:
+  description: Products in category
+  tags: [stage:mvp]
+  layout: $layout.main
+  data:
+    category_id: input uuid
+    category: query $entity.catalog.category where id == data.category_id
+    products: query $entity.catalog.product where category_id == data.category_id and in_stock == true
+  components:
+    - id: title
+      type: value
+      value: data.category.name
+
+    - id: products_list
+      type: component
+      value: "$component.shop.product-card(product: product of data.products)"
+
+    - if: data.products.length == 0
+      then:
+        - id: empty
+          type: text
+          label: No products in this category
+
+screen:catalog:product:
+  description: Product detail page
+  tags: [stage:mvp]
+  layout: $layout.main
+  data:
+    product_id: input uuid
+    product: query $entity.catalog.product where id == data.product_id
+    category: query $entity.catalog.category where id == data.product.category_id
+  components:
+    - id: breadcrumb
+      type: value
+      value: data.category.name
+
+    - id: image
+      type: image
+      value: data.product.image_url
+
+    - id: name
+      type: value
+      value: data.product.name
+
+    - id: price
+      type: value
+      label: Price
+      value: data.product.price
+
+    - if: data.product.old_price > data.product.price
+      then:
+        - id: old_price
+          type: value
+          label: Was
+          value: data.product.old_price
+        - id: discount
+          type: text
+          label: Sale!
+
+    - id: description
+      type: value
+      label: Description
+      value: data.product.description
+
+    - id: rating
+      type: value
+      label: Rating
+      value: data.product.rating
+
+    - id: reviews_count
+      type: value
+      label: Reviews
+      value: data.product.reviews_count
+
+    - if: data.product.in_stock == true
+      then:
+        - id: stock_status
+          type: text
+          label: In Stock
+        - id: add_to_cart
+          type: button
+          label: Add to Cart
+          action: "$action.cart.add(product_id: data.product.id)"
+      else:
+        - id: out_of_stock
+          type: text
+          label: Out of Stock
+
+    - id: back_btn
+      type: button
+      label: Back to Category
+      action: "$screen.catalog.products(category_id: data.category.id)"
+
+
+# =============================================================================
+# SCREENS - CART
+# =============================================================================
+
+screen:cart:view:
+  description: Shopping cart
+  tags: [stage:mvp]
+  layout: $layout.main
+  data:
+    items: $context.cart_items
+  components:
+    - id: title
+      type: text
+      label: Shopping Cart
+
+    - if: data.items.length == 0
+      then:
+        - id: empty
+          type: text
+          label: Your cart is empty
+        - id: shop_btn
+          type: button
+          label: Start Shopping
+          action: $screen.shop.home
+      else:
+        - id: items_list
+          type: list
+          value: for item of data.items
+          components:
+            - *shop:cart-item
+
+        - id: total
+          type: value
+          label: Total
+          value: $context.cart_total
+
+        - id: checkout_btn
+          type: button
+          label: Proceed to Checkout
+          action: $screen.checkout.address
+
+
+# =============================================================================
+# SCREENS - CHECKOUT
+# =============================================================================
+
+screen:checkout:address:
+  description: Select delivery address
+  tags: [stage:mvp]
+  layout: $layout.checkout
+  data:
+    user: $context.user
+    addresses: query $entity.users.address where user_id == $context.user_id
+  components:
+    - id: title
+      type: text
+      label: Delivery Address
+
+    - if: data.addresses.length == 0
+      then:
+        - id: no_address
+          type: text
+          label: No saved addresses
+        - id: add_btn
+          type: button
+          label: Add Address
+          action: $dialog.address.add
+      else:
+        - id: addresses_list
+          type: list
+          value: for address of data.addresses
+          components:
+            - id: title
+              type: value
+              value: address.title
+            - id: full_address
+              type: value
+              value: address.city, address.street, address.building
+            - id: select_btn
+              type: button
+              label: Deliver Here
+              action: "$screen.checkout.confirm(address_id: address.id)"
+
+        - id: add_new
+          type: button
+          label: Add New Address
+          action: $dialog.address.add
+
+screen:checkout:confirm:
+  description: Order confirmation
+  tags: [stage:mvp]
+  layout: $layout.checkout
+  data:
+    address_id: input uuid
+    address: query $entity.users.address where id == data.address_id
+    items: $context.cart_items
+    total: $context.cart_total
+  components:
+    - id: title
+      type: text
+      label: Confirm Order
+
+    - id: address_title
+      type: text
+      label: Delivery Address
+
+    - id: address_value
+      type: value
+      value: data.address.city, data.address.street, data.address.building
+
+    - id: items_title
+      type: text
+      label: Order Items
+
+    - id: items_list
+      type: list
+      value: for item of data.items
+      components:
+        - id: name
+          type: value
+          value: item.product.name
+        - id: qty
+          type: value
+          value: item.quantity
+        - id: price
+          type: value
+          value: item.product.price * item.quantity
+
+    - id: subtotal
+      type: value
+      label: Subtotal
+      value: data.total
+
+    - id: delivery
+      type: value
+      label: Delivery
+      value: 0
+
+    - id: total
+      type: value
+      label: Total
+      value: data.total
+
+    - id: place_order
+      type: button
+      label: Place Order
+      action: "$action.orders.create(address_id: data.address_id)"
+
+
+# =============================================================================
+# SCREENS - ACCOUNT (Personal Cabinet)
+# =============================================================================
+
+screen:account:profile:
+  description: User profile
+  tags: [stage:mvp, account]
+  layout: $layout.main
+  data:
+    user: $context.user
+  components:
+    - id: title
+      type: text
+      label: My Profile
+
+    - if: $context.is_authenticated == false
+      then:
+        - id: login_prompt
+          type: text
+          label: Please log in to view your profile
+        - id: login_btn
+          type: button
+          label: Log In
+          action: $screen.auth.login
+        - id: register_btn
+          type: button
+          label: Register
+          action: $screen.auth.register
+      else:
+        - id: avatar
+          type: image
+          value: data.user.avatar_url
+
+        - id: name
+          type: value
+          label: Name
+          value: data.user.name
+
+        - id: email
+          type: value
+          label: Email
+          value: data.user.email
+
+        - id: phone
+          type: value
+          label: Phone
+          value: data.user.phone
+
+        - id: edit_btn
+          type: button
+          label: Edit Profile
+          action: $dialog.account.edit-profile
+
+        - id: addresses_btn
+          type: button
+          label: My Addresses
+          action: $screen.account.addresses
+
+        - id: orders_btn
+          type: button
+          label: Order History
+          action: $screen.account.orders
+
+        - id: logout_btn
+          type: button
+          label: Log Out
+          action: $action.auth.logout
+
+screen:account:addresses:
+  description: User addresses
+  tags: [stage:mvp, account]
+  layout: $layout.main
+  data:
+    addresses: query $entity.users.address where user_id == $context.user_id
+  components:
+    - id: title
+      type: text
+      label: My Addresses
+
+    - if: data.addresses.length == 0
+      then:
+        - id: empty
+          type: text
+          label: No saved addresses
+
+    - id: list
+      type: list
+      value: for address of data.addresses
+      components:
+        - id: title
+          type: value
+          value: address.title
+        - if: address.is_default == true
+          then:
+            - id: default_badge
+              type: text
+              label: Default
+        - id: full_address
+          type: value
+          value: address.city, address.street, address.building, address.apartment
+        - id: edit_btn
+          type: button
+          label: Edit
+          action: "$dialog.address.edit(address_id: address.id)"
+        - id: delete_btn
+          type: button
+          label: Delete
+          action: "$dialog.common.confirm-delete(item_name: address.title, on_confirm: $action.account.delete-address(address_id: address.id))"
+
+    - id: add_btn
+      type: button
+      label: Add Address
+      action: $dialog.address.add
+
+screen:account:orders:
+  description: Order history
+  tags: [stage:mvp, account]
+  layout: $layout.main
+  data:
+    orders: query $entity.orders.order where user_id == $context.user_id order by created_at desc
+  components:
+    - id: title
+      type: text
+      label: Order History
+
+    - if: data.orders.length == 0
+      then:
+        - id: empty
+          type: text
+          label: You have no orders yet
+        - id: shop_btn
+          type: button
+          label: Start Shopping
+          action: $screen.shop.home
+      else:
+        - id: orders_list
+          type: component
+          value: "$component.shop.order-row(order: order of data.orders)"
+
+screen:account:order-details:
+  description: Order details
+  tags: [stage:mvp, account]
+  layout: $layout.main
+  data:
+    order_id: input uuid
+    order: query $entity.orders.order where id == data.order_id
+    items: query $entity.orders.order-item where order_id == data.order_id
+    address: query $entity.users.address where id == data.order.address_id
+  components:
+    - id: title
+      type: text
+      label: Order Details
+
+    - id: order_number
+      type: value
+      label: Order Number
+      value: data.order.id
+
+    - id: date
+      type: value
+      label: Date
+      value: data.order.created_at
+
+    - id: status
+      type: value
+      label: Status
+      value: data.order.status
+
+    - id: address_title
+      type: text
+      label: Delivery Address
+
+    - id: address_value
+      type: value
+      value: data.address.city, data.address.street, data.address.building
+
+    - id: items_title
+      type: text
+      label: Items
+
+    - id: items_list
+      type: list
+      value: for item of data.items
+      components:
+        - id: name
+          type: value
+          value: item.product.name
+        - id: qty
+          type: value
+          label: Qty
+          value: item.quantity
+        - id: price
+          type: value
+          label: Price
+          value: item.price
+        - id: total
+          type: value
+          label: Total
+          value: item.total
+
+    - id: items_total
+      type: value
+      label: Subtotal
+      value: data.order.items_total
+
+    - id: delivery
+      type: value
+      label: Delivery
+      value: data.order.delivery_cost
+
+    - id: total
+      type: value
+      label: Total
+      value: data.order.total
+
+    - id: back_btn
+      type: button
+      label: Back to Orders
+      action: $screen.account.orders
+
+
+# =============================================================================
+# SCREENS - AUTH
+# =============================================================================
+
+screen:auth:login:
+  description: Login screen
+  tags: [stage:mvp, auth]
+  layout: $layout.auth
+  components:
+    - id: title
+      type: text
+      label: Log In
+
+    - id: email
+      type: input
+      label: Email
+      placeholder: Enter your email
+
+    - id: password
+      type: input
+      label: Password
+      placeholder: Enter your password
+
+    - id: login_btn
+      type: button
+      label: Log In
+      action: $action.auth.login
+
+    - id: forgot
+      type: button
+      label: Forgot Password?
+      action: $screen.auth.forgot-password
+
+    - id: register_link
+      type: button
+      label: Don't have an account? Register
+      action: $screen.auth.register
+
+screen:auth:register:
+  description: Registration screen
+  tags: [stage:mvp, auth]
+  layout: $layout.auth
+  components:
+    - id: title
+      type: text
+      label: Create Account
+
+    - id: name
+      type: input
+      label: Name
+      placeholder: Enter your name
+
+    - id: email
+      type: input
+      label: Email
+      placeholder: Enter your email
+
+    - id: phone
+      type: input
+      label: Phone
+      placeholder: Enter your phone
+
+    - id: password
+      type: input
+      label: Password
+      placeholder: Create a password
+
+    - id: register_btn
+      type: button
+      label: Create Account
+      action: $action.auth.register
+
+    - id: login_link
+      type: button
+      label: Already have an account? Log In
+      action: $screen.auth.login
+
+screen:auth:forgot-password:
+  description: Password recovery
+  tags: [stage:v1, auth]
+  layout: $layout.auth
+  components:
+    - id: title
+      type: text
+      label: Reset Password
+
+    - id: email
+      type: input
+      label: Email
+      placeholder: Enter your email
+
+    - id: submit_btn
+      type: button
+      label: Send Reset Link
+      action: $action.auth.request-password-reset
+
+    - id: back_btn
+      type: button
+      label: Back to Login
+      action: $screen.auth.login
+
+
+# =============================================================================
+# ACTIONS - CART
+# =============================================================================
+
+action:cart:add:
+  description: Add product to cart
+  tags: [stage:mvp, cart]
+  props:
+    product_id: uuid
+  data:
+    existing: query $entity.cart.item where user_id == $context.user_id and product_id == props.product_id
+  effects:
+    - if: data.existing != null
+      then:
+        - data.existing.quantity = data.existing.quantity + 1
+        - "$toast.success(message: Added to cart)"
+      else:
+        - "create $entity.cart.item(user_id: $context.user_id, product_id: props.product_id, quantity: 1)"
+        - "$toast.success(message: Added to cart)"
+
+action:cart:update-qty:
+  description: Update cart item quantity
+  tags: [stage:mvp, cart]
+  props:
+    item_id: uuid
+    quantity: integer
+  data:
+    item: query $entity.cart.item where id == props.item_id
+  effects:
+    - if: props.quantity <= 0
+      then:
+        - delete data.item
+        - "$toast.info(message: Item removed)"
+      else:
+        - data.item.quantity = props.quantity
+
+action:cart:remove:
+  description: Remove item from cart
+  tags: [stage:mvp, cart]
+  props:
+    item_id: uuid
+  data:
+    item: query $entity.cart.item where id == props.item_id
+  effects:
+    - delete data.item
+    - "$toast.info(message: Item removed)"
+
+action:cart:clear:
+  description: Clear all cart items
+  tags: [stage:mvp, cart]
+  data:
+    items: $context.cart_items
+  effects:
+    - delete data.items
+
+
+# =============================================================================
+# ACTIONS - ORDERS
+# =============================================================================
+
+action:orders:create:
+  description: Create order from cart
+  tags: [stage:mvp, orders]
+  props:
+    address_id: uuid
+  data:
+    cart_items: $context.cart_items
+    total: $context.cart_total
+  effects:
+    - "create $entity.orders.order(user_id: $context.user_id, address_id: props.address_id, status: pending, items_total: data.total, delivery_cost: 0, total: data.total)"
+    - $action.cart.clear
+    - $dialog.orders.success
+    - $screen.account.orders
+
+
+# =============================================================================
+# ACTIONS - AUTH
+# =============================================================================
+
+action:auth:login:
+  description: Log in user
+  tags: [stage:mvp, auth]
+  effects:
+    - $context.is_authenticated = true
+    - "$toast.success(message: Welcome back!)"
+    - $screen.account.profile
+
+action:auth:register:
+  description: Register new user
+  tags: [stage:mvp, auth]
+  effects:
+    - "create $entity.users.user(email: form.email, name: form.name, phone: form.phone)"
+    - $context.is_authenticated = true
+    - "$toast.success(message: Account created!)"
+    - $screen.account.profile
+
+action:auth:logout:
+  description: Log out user
+  tags: [stage:mvp, auth]
+  effects:
+    - $context.is_authenticated = false
+    - $context.user_id = null
+    - "$toast.info(message: Logged out)"
+    - $screen.shop.home
+
+action:auth:request-password-reset:
+  description: Request password reset email
+  tags: [stage:v1, auth]
+  effects:
+    - "$toast.success(message: Reset link sent to your email)"
+    - $screen.auth.login
+
+
+# =============================================================================
+# ACTIONS - ACCOUNT
+# =============================================================================
+
+action:account:update-profile:
+  description: Update user profile
+  tags: [stage:mvp, account]
+  data:
+    user: $context.user
+  effects:
+    - data.user.name = form.name
+    - data.user.phone = form.phone
+    - $dialog.close
+    - "$toast.success(message: Profile updated)"
+
+action:account:add-address:
+  description: Add new address
+  tags: [stage:mvp, account]
+  effects:
+    - "create $entity.users.address(user_id: $context.user_id, title: form.title, city: form.city, street: form.street, building: form.building, apartment: form.apartment, postal_code: form.postal_code)"
+    - $dialog.close
+    - "$toast.success(message: Address added)"
+
+action:account:update-address:
+  description: Update address
+  tags: [stage:mvp, account]
+  props:
+    address_id: uuid
+  data:
+    address: query $entity.users.address where id == props.address_id
+  effects:
+    - data.address.title = form.title
+    - data.address.city = form.city
+    - data.address.street = form.street
+    - data.address.building = form.building
+    - data.address.apartment = form.apartment
+    - data.address.postal_code = form.postal_code
+    - $dialog.close
+    - "$toast.success(message: Address updated)"
+
+action:account:delete-address:
+  description: Delete address
+  tags: [stage:mvp, account]
+  props:
+    address_id: uuid
+  data:
+    address: query $entity.users.address where id == props.address_id
+  effects:
+    - delete data.address
+    - "$toast.info(message: Address deleted)"
+
+
+# =============================================================================
+# DIALOGS
+# =============================================================================
+
+dialog:orders:success:
+  description: Order placed successfully
+  components:
+    - id: icon
+      type: icon
+      value: check-circle
+
+    - id: title
+      type: text
+      label: Order Placed!
+
+    - id: message
+      type: text
+      label: Thank you for your order. We'll send you updates on your delivery.
+
+    - id: view_btn
+      type: button
+      label: View Order
+      action: $screen.account.orders
+
+    - id: continue_btn
+      type: button
+      label: Continue Shopping
+      action: $screen.shop.home
+
+dialog:account:edit-profile:
+  description: Edit profile dialog
+  data:
+    user: $context.user
+  components:
+    - id: title
+      type: text
+      label: Edit Profile
+
+    - id: name
+      type: input
+      label: Name
+      value: data.user.name
+
+    - id: phone
+      type: input
+      label: Phone
+      value: data.user.phone
+
+    - id: cancel
+      type: button
+      label: Cancel
+      action: $dialog.close
+
+    - id: save
+      type: button
+      label: Save
+      action: $action.account.update-profile
+
+dialog:address:add:
+  description: Add new address dialog
+  components:
+    - id: title
+      type: text
+      label: Add Address
+
+    - id: addr_title
+      type: input
+      label: Title
+      placeholder: Home, Work, etc.
+
+    - id: city
+      type: input
+      label: City
+
+    - id: street
+      type: input
+      label: Street
+
+    - id: building
+      type: input
+      label: Building
+
+    - id: apartment
+      type: input
+      label: Apartment
+
+    - id: postal_code
+      type: input
+      label: Postal Code
+
+    - id: cancel
+      type: button
+      label: Cancel
+      action: $dialog.close
+
+    - id: save
+      type: button
+      label: Add Address
+      action: $action.account.add-address
+
+dialog:address:edit:
+  description: Edit address dialog
+  props:
+    address_id: uuid
+  data:
+    address: query $entity.users.address where id == props.address_id
+  components:
+    - id: title
+      type: text
+      label: Edit Address
+
+    - id: addr_title
+      type: input
+      label: Title
+      value: data.address.title
+
+    - id: city
+      type: input
+      label: City
+      value: data.address.city
+
+    - id: street
+      type: input
+      label: Street
+      value: data.address.street
+
+    - id: building
+      type: input
+      label: Building
+      value: data.address.building
+
+    - id: apartment
+      type: input
+      label: Apartment
+      value: data.address.apartment
+
+    - id: postal_code
+      type: input
+      label: Postal Code
+      value: data.address.postal_code
+
+    - id: cancel
+      type: button
+      label: Cancel
+      action: $dialog.close
+
+    - id: save
+      type: button
+      label: Save
+      action: "$action.account.update-address(address_id: props.address_id)"
+
+dialog:common:confirm-delete:
+  description: Delete confirmation dialog
+  props:
+    item_name: string
+    on_confirm: $action
+  components:
+    - id: icon
+      type: icon
+      value: warning
+
+    - id: title
+      type: text
+      label: Delete?
+
+    - id: message
+      type: value
+      value: props.item_name
+
+    - id: cancel
+      type: button
+      label: Cancel
+      action: $dialog.close
+
+    - id: delete
+      type: button
+      label: Delete
+      action: props.on_confirm
+
+
+# =============================================================================
+# EVENTS
+# =============================================================================
+
+event:orders:status-changed:
+  description: Notify user when order status changes
+  tags: [stage:v1, orders]
+  props:
+    order_id: uuid
+    user_id: uuid
+    new_status: string
+  to: props.user_id
+  effects:
+    - "$toast.info(message: Order status updated to props.new_status)"
+
+event:orders:shipped:
+  description: Notify user when order is shipped
+  tags: [stage:v1, orders]
+  props:
+    order_id: uuid
+    user_id: uuid
+  to: props.user_id
+  effects:
+    - $dialog.orders.shipped
+
+
+# =============================================================================
+# COMPONENTS (reusable)
+# =============================================================================
+
+component:shop:product-card:
+  description: Product card for lists
+  props:
+    product: $entity.catalog.product
+  components:
+    - id: image
+      type: image
+      value: props.product.image_url
+
+    - id: name
+      type: value
+      value: props.product.name
+
+    - id: price
+      type: value
+      label: Price
+      value: props.product.price
+
+    - if: props.product.old_price > props.product.price
+      then:
+        - id: old_price
+          type: value
+          label: Was
+          value: props.product.old_price
+
+    - id: view_btn
+      type: button
+      label: View
+      action: "$screen.catalog.product(product_id: props.product.id)"
+
+    - id: add_btn
+      type: button
+      label: Add to Cart
+      action: "$action.cart.add(product_id: props.product.id)"
+
+component:shop:order-row:
+  description: Order row for history
+  props:
+    order: $entity.orders.order
+  components:
+    - id: order_id
+      type: value
+      label: Order
+      value: props.order.id
+
+    - id: date
+      type: value
+      label: Date
+      value: props.order.created_at
+
+    - id: status
+      type: value
+      label: Status
+      value: props.order.status
+
+    - id: total
+      type: value
+      label: Total
+      value: props.order.total
+
+    - id: view_btn
+      type: button
+      label: Details
+      action: "$screen.account.order-details(order_id: props.order.id)"
