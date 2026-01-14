@@ -1,0 +1,497 @@
+# yaml-language-server: $schema=../../../schema.json
+# Marketplace Test Scenarios
+
+# =============================================================================
+# AUTH
+# =============================================================================
+
+test:auth:login-success:
+  description: Successful login
+  tags: [priority:high, smoke, auth]
+  context:
+    is_authenticated: false
+    user.exists: true
+    credentials.valid: true
+  entry: $screen.auth.login
+  exit: $screen.account.profile
+  covers:
+    - $action.auth.login
+    - $toast.success
+
+test:auth:login-invalid-password:
+  description: Login with wrong password
+  tags: [priority:high, auth, negative]
+  context:
+    is_authenticated: false
+    user.exists: true
+    credentials.valid: false
+  entry: $screen.auth.login
+  exit: $screen.auth.login
+  covers:
+    - $toast.error
+
+test:auth:login-user-not-found:
+  description: Login with non-existent email
+  tags: [priority:medium, auth, negative]
+  context:
+    is_authenticated: false
+    user.exists: false
+  entry: $screen.auth.login
+  exit: $screen.auth.login
+  covers:
+    - $toast.error
+
+test:auth:register-success:
+  description: Successful registration
+  tags: [priority:high, smoke, auth]
+  context:
+    is_authenticated: false
+    email.available: true
+    form.valid: true
+  entry: $screen.auth.register
+  exit: $screen.account.profile
+  covers:
+    - $action.auth.register
+    - $toast.success
+
+test:auth:register-email-taken:
+  description: Registration with existing email
+  tags: [priority:high, auth, negative]
+  context:
+    is_authenticated: false
+    email.available: false
+  entry: $screen.auth.register
+  exit: $screen.auth.register
+  covers:
+    - $toast.error
+
+test:auth:logout:
+  description: User logout
+  tags: [priority:high, auth]
+  context:
+    is_authenticated: true
+  entry: $screen.account.profile
+  exit: $screen.shop.home
+  covers:
+    - $action.auth.logout
+    - $toast.info
+
+test:auth:forgot-password:
+  description: Request password reset
+  tags: [priority:medium, auth]
+  context:
+    is_authenticated: false
+    email.exists: true
+  entry: $screen.auth.forgot-password
+  exit: $screen.auth.login
+  covers:
+    - $action.auth.request-password-reset
+    - $toast.success
+
+
+# =============================================================================
+# CATALOG & BROWSING
+# =============================================================================
+
+test:catalog:browse-categories:
+  description: View all categories
+  tags: [priority:high, smoke, catalog]
+  context: {}
+  entry: $screen.shop.home
+  exit: $screen.catalog.categories
+  covers:
+    - $screen.catalog.categories
+
+test:catalog:browse-products:
+  description: View products in category
+  tags: [priority:high, smoke, catalog]
+  context:
+    category.products.count: "> 0"
+  entry: $screen.catalog.categories
+  exit: $screen.catalog.products
+  covers:
+    - $screen.catalog.products
+
+test:catalog:empty-category:
+  description: Category with no products
+  tags: [priority:medium, catalog]
+  context:
+    category.products.count: 0
+  entry: $screen.catalog.categories
+  exit: $screen.catalog.products
+  covers:
+    - $screen.catalog.products#empty
+
+test:catalog:product-details:
+  description: View product details
+  tags: [priority:high, catalog]
+  context:
+    product.in_stock: true
+  entry: $screen.catalog.products
+  exit: $screen.catalog.product
+  covers:
+    - $screen.catalog.product#add_to_cart
+
+test:catalog:product-out-of-stock:
+  description: Product unavailable
+  tags: [priority:medium, catalog]
+  context:
+    product.in_stock: false
+  entry: $screen.catalog.products
+  exit: $screen.catalog.product
+  covers:
+    - $screen.catalog.product#out_of_stock
+
+test:catalog:product-on-sale:
+  description: Product with discount
+  tags: [priority:low, catalog]
+  context:
+    product.old_price: "> product.price"
+  entry: $screen.catalog.product
+  exit: $screen.catalog.product
+  covers:
+    - $screen.catalog.product#old_price
+    - $screen.catalog.product#discount
+
+
+# =============================================================================
+# CART
+# =============================================================================
+
+test:cart:add-item:
+  description: Add product to cart
+  tags: [priority:critical, smoke, cart]
+  context:
+    product.in_stock: true
+  entry: $screen.catalog.product
+  exit: $screen.catalog.product
+  covers:
+    - $action.cart.add
+    - $toast.success
+
+test:cart:add-existing-item:
+  description: Add product already in cart (qty increases)
+  tags: [priority:high, cart]
+  context:
+    product.in_stock: true
+    cart.contains_product: true
+  entry: $screen.catalog.product
+  exit: $screen.catalog.product
+  covers:
+    - $action.cart.add
+    - $toast.success
+
+test:cart:view-items:
+  description: View cart with items
+  tags: [priority:high, smoke, cart]
+  context:
+    cart_items.count: "> 0"
+  entry: $screen.shop.home
+  exit: $screen.cart.view
+  covers:
+    - $screen.cart.view#items_list
+    - $screen.cart.view#total
+
+test:cart:view-empty:
+  description: View empty cart
+  tags: [priority:high, cart]
+  context:
+    cart_items.count: 0
+  entry: $screen.shop.home
+  exit: $screen.cart.view
+  covers:
+    - $screen.cart.view#empty
+    - $screen.cart.view#shop_btn
+
+test:cart:update-quantity:
+  description: Change item quantity
+  tags: [priority:high, cart]
+  context:
+    cart_items.count: "> 0"
+  entry: $screen.cart.view
+  exit: $screen.cart.view
+  covers:
+    - $action.cart.update-qty
+
+test:cart:remove-item:
+  description: Remove item from cart
+  tags: [priority:high, cart]
+  context:
+    cart_items.count: "> 0"
+  entry: $screen.cart.view
+  exit: $screen.cart.view
+  covers:
+    - $action.cart.remove
+    - $toast.info
+
+test:cart:set-quantity-zero:
+  description: Setting qty to 0 removes item
+  tags: [priority:medium, cart]
+  context:
+    cart_items.count: "> 0"
+    new_quantity: 0
+  entry: $screen.cart.view
+  exit: $screen.cart.view
+  covers:
+    - $action.cart.update-qty
+    - $toast.info
+
+
+# =============================================================================
+# CHECKOUT
+# =============================================================================
+
+test:checkout:start-with-items:
+  description: Start checkout with cart items
+  tags: [priority:critical, e2e, checkout]
+  context:
+    is_authenticated: true
+    cart_items.count: "> 0"
+  entry: $screen.cart.view
+  exit: $screen.checkout.address
+  covers:
+    - $screen.checkout.address
+
+test:checkout:start-empty-cart:
+  description: Cannot start checkout with empty cart
+  tags: [priority:high, checkout, negative]
+  context:
+    is_authenticated: true
+    cart_items.count: 0
+  entry: $screen.cart.view
+  exit: $screen.cart.view
+  covers:
+    - $screen.cart.view#empty
+
+test:checkout:select-address:
+  description: Select delivery address
+  tags: [priority:critical, checkout]
+  context:
+    is_authenticated: true
+    cart_items.count: "> 0"
+    user.addresses.count: "> 0"
+  entry: $screen.checkout.address
+  exit: $screen.checkout.confirm
+  covers:
+    - $screen.checkout.confirm
+
+test:checkout:no-address-prompt:
+  description: Prompt to add address if none
+  tags: [priority:high, checkout]
+  context:
+    is_authenticated: true
+    cart_items.count: "> 0"
+    user.addresses.count: 0
+  entry: $screen.checkout.address
+  exit: $dialog.address.add
+  covers:
+    - $screen.checkout.address#no_address
+    - $dialog.address.add
+
+test:checkout:complete-order:
+  description: Place order successfully
+  tags: [priority:critical, e2e, checkout]
+  context:
+    is_authenticated: true
+    cart_items.count: "> 0"
+    address.selected: true
+  entry: $screen.checkout.confirm
+  exit: $screen.account.orders
+  covers:
+    - $action.orders.create
+    - $action.cart.clear
+    - $dialog.orders.success
+
+test:checkout:full-flow:
+  description: Complete checkout flow end-to-end
+  tags: [priority:critical, e2e, smoke, checkout]
+  context:
+    is_authenticated: true
+    cart_items.count: "> 0"
+    user.addresses.count: "> 0"
+  entry: $screen.cart.view
+  exit: $screen.account.orders
+  covers:
+    - $screen.checkout.address
+    - $screen.checkout.confirm
+    - $action.orders.create
+    - $dialog.orders.success
+
+
+# =============================================================================
+# ACCOUNT - PROFILE
+# =============================================================================
+
+test:account:profile-guest:
+  description: Guest sees login prompt
+  tags: [priority:high, account]
+  context:
+    is_authenticated: false
+  entry: $screen.account.profile
+  exit: $screen.account.profile
+  covers:
+    - $screen.account.profile#login_prompt
+    - $screen.account.profile#login_btn
+    - $screen.account.profile#register_btn
+
+test:account:profile-authenticated:
+  description: User sees profile data
+  tags: [priority:high, smoke, account]
+  context:
+    is_authenticated: true
+  entry: $screen.account.profile
+  exit: $screen.account.profile
+  covers:
+    - $screen.account.profile#avatar
+    - $screen.account.profile#name
+    - $screen.account.profile#email
+
+test:account:edit-profile:
+  description: Edit user profile
+  tags: [priority:medium, account]
+  context:
+    is_authenticated: true
+  entry: $screen.account.profile
+  exit: $screen.account.profile
+  covers:
+    - $dialog.account.edit-profile
+    - $action.account.update-profile
+    - $toast.success
+
+
+# =============================================================================
+# ACCOUNT - ADDRESSES
+# =============================================================================
+
+test:account:view-addresses:
+  description: View saved addresses
+  tags: [priority:high, account]
+  context:
+    is_authenticated: true
+    user.addresses.count: "> 0"
+  entry: $screen.account.profile
+  exit: $screen.account.addresses
+  covers:
+    - $screen.account.addresses#list
+
+test:account:no-addresses:
+  description: No saved addresses
+  tags: [priority:medium, account]
+  context:
+    is_authenticated: true
+    user.addresses.count: 0
+  entry: $screen.account.profile
+  exit: $screen.account.addresses
+  covers:
+    - $screen.account.addresses#empty
+
+test:account:add-address:
+  description: Add new address
+  tags: [priority:high, account]
+  context:
+    is_authenticated: true
+  entry: $screen.account.addresses
+  exit: $screen.account.addresses
+  covers:
+    - $dialog.address.add
+    - $action.account.add-address
+    - $toast.success
+
+test:account:edit-address:
+  description: Edit existing address
+  tags: [priority:medium, account]
+  context:
+    is_authenticated: true
+    user.addresses.count: "> 0"
+  entry: $screen.account.addresses
+  exit: $screen.account.addresses
+  covers:
+    - $dialog.address.edit
+    - $action.account.update-address
+    - $toast.success
+
+test:account:delete-address:
+  description: Delete address with confirmation
+  tags: [priority:medium, account]
+  context:
+    is_authenticated: true
+    user.addresses.count: "> 0"
+  entry: $screen.account.addresses
+  exit: $screen.account.addresses
+  covers:
+    - $dialog.common.confirm-delete
+    - $action.account.delete-address
+    - $toast.info
+
+
+# =============================================================================
+# ACCOUNT - ORDERS
+# =============================================================================
+
+test:account:view-orders:
+  description: View order history
+  tags: [priority:high, account]
+  context:
+    is_authenticated: true
+    user.orders.count: "> 0"
+  entry: $screen.account.profile
+  exit: $screen.account.orders
+  covers:
+    - $screen.account.orders#orders_list
+
+test:account:no-orders:
+  description: No orders yet
+  tags: [priority:medium, account]
+  context:
+    is_authenticated: true
+    user.orders.count: 0
+  entry: $screen.account.profile
+  exit: $screen.account.orders
+  covers:
+    - $screen.account.orders#empty
+    - $screen.account.orders#shop_btn
+
+test:account:order-details:
+  description: View order details
+  tags: [priority:high, account]
+  context:
+    is_authenticated: true
+    user.orders.count: "> 0"
+  entry: $screen.account.orders
+  exit: $screen.account.order-details
+  covers:
+    - $screen.account.order-details#items_list
+    - $screen.account.order-details#status
+    - $screen.account.order-details#total
+
+
+# =============================================================================
+# NAVIGATION
+# =============================================================================
+
+test:nav:home-to-catalog:
+  description: Navigate from home to catalog
+  tags: [priority:low, navigation, smoke]
+  context: {}
+  entry: $screen.shop.home
+  exit: $screen.catalog.categories
+  covers:
+    - $layout.main#nav_catalog
+
+test:nav:home-to-cart:
+  description: Navigate from home to cart
+  tags: [priority:low, navigation]
+  context: {}
+  entry: $screen.shop.home
+  exit: $screen.cart.view
+  covers:
+    - $layout.main#nav_cart
+
+test:nav:home-to-profile:
+  description: Navigate from home to profile
+  tags: [priority:low, navigation]
+  context: {}
+  entry: $screen.shop.home
+  exit: $screen.account.profile
+  covers:
+    - $layout.main#nav_profile

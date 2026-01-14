@@ -8,6 +8,7 @@
 
 action:myepic:do-something:
   description: What this action does
+  tags: [stage:mvp]
   effects:
     - $screen.myepic.result
 
@@ -18,6 +19,7 @@ action:myepic:do-something:
 
 action:orders:submit:
   description: Submit order
+  tags: [stage:v1]
   props:
     order_id: uuid
   data:

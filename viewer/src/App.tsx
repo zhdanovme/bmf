@@ -78,7 +78,6 @@ function WelcomeView() {
     try {
       const dirHandle = await window.showDirectoryPicker();
       const folderName = dirHandle.name;
-      const folderPath = folderName; // We can't get the full path due to security
 
       const files = await readYamlFiles(dirHandle);
 
@@ -88,7 +87,7 @@ function WelcomeView() {
       }
 
       // Pass the directory handle to enable saving comments
-      loadFromFiles(files, folderName, folderPath, dirHandle as unknown as Parameters<typeof loadFromFiles>[3]);
+      loadFromFiles(files, folderName, dirHandle as unknown as Parameters<typeof loadFromFiles>[2]);
     } catch (e) {
       // User cancelled or error
       if (e instanceof Error && e.name !== 'AbortError') {
@@ -200,8 +199,9 @@ function AppContent() {
   const loaded = useBmfStore((s) => s.loaded);
   const graph = useBmfStore((s) => s.graph);
   const fileName = useBmfStore((s) => s.fileName);
-  const projectId = useBmfStore((s) => s.projectId);
+  const directoryHandle = useBmfStore((s) => s.directoryHandle);
   const reset = useBmfStore((s) => s.reset);
+  const refreshFolder = useBmfStore((s) => s.refreshFolder);
   const loadFromYaml = useBmfStore((s) => s.loadFromYaml);
   const hiddenTypes = useBmfStore((s) => s.hiddenTypes);
   const hiddenEpics = useBmfStore((s) => s.hiddenEpics);
@@ -223,7 +223,7 @@ function AppContent() {
     graph.nodes.forEach((node) => {
       const isTypeHidden = hiddenTypes.has(node.type);
       const isEpicHidden = node.epic && hiddenEpics.has(node.epic);
-      const isTagHidden = node.tags.length > 0 && node.tags.some(tag => hiddenTags.has(tag));
+      const isTagHidden = node.tags.length > 0 && node.tags.every(tag => hiddenTags.has(tag));
       const isNoTagsHidden = node.tags.length === 0 && hiddenTags.has(NO_TAGS_FILTER);
       if (!isTypeHidden && !isEpicHidden && !isTagHidden && !isNoTagsHidden) {
         visibleNodeIds.add(node.id);
@@ -246,10 +246,18 @@ function AppContent() {
       <header className="app-header">
         <h1>BMF Viewer</h1>
         <span className="file-name">{fileName}</span>
-        {projectId && <span className="project-id">#{projectId}</span>}
         <span className="stats">
           {graph.nodes.length} nodes ({visibleNodes}) / {graph.edges.length} edges ({visibleEdges})
         </span>
+        {directoryHandle && (
+          <button onClick={refreshFolder} className="refresh-btn" title="Refresh folder">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M23 4v6h-6" />
+              <path d="M1 20v-6h6" />
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+            </svg>
+          </button>
+        )}
         <button onClick={reset} className="reset-btn">
           Load another file
         </button>

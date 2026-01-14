@@ -44,7 +44,7 @@ function findYamlFiles(dir: string): string[] {
 
       if (entry.isDirectory()) {
         traverse(fullPath);
-      } else if (entry.isFile() && /\.(ya?ml)$/i.test(entry.name)) {
+      } else if (entry.isFile() && /\.(ya?ml)$/i.test(entry.name) && !entry.name.startsWith('_')) {
         files.push(fullPath);
       }
     }

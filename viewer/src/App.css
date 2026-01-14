@@ -161,16 +161,31 @@ body {
   font-family: monospace;
 }
 
-.project-id {
-  color: #64748b;
-  font-size: 12px;
-  font-family: monospace;
-}
-
 .stats {
   color: #64748b;
   font-size: 13px;
   margin-left: auto;
+}
+
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: #334155;
+  border: none;
+  border-radius: 6px;
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.refresh-btn:hover {
+  background: #475569;
+}
+
+.refresh-btn svg {
+  flex-shrink: 0;
 }
 
 .reset-btn {
@@ -584,6 +599,8 @@ body {
   padding: 12px;
   z-index: 50;
   max-width: 280px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 

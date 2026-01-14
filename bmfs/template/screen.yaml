@@ -67,6 +67,7 @@ components:myepic:
 
 screen:myepic:dashboard:
   description: Dashboard с локальными компонентами
+  tags: [stage:mvp]
   layout: $layout.global.main
   data:
     user: $context.current_user
@@ -85,6 +86,7 @@ screen:myepic:dashboard:
 
 screen:myepic:profile:
   description: Profile с условными компонентами
+  tags: [stage:v1]
   layout: $layout.global.main
   data:
     user: $context.current_user
@@ -104,6 +106,7 @@ screen:myepic:profile:
 
 screen:myepic:simple:
   description: Простой экран без переиспользования
+  tags: [stage:backlog]
   layout: $layout.global.main
   data:
     user: $context.current_user
@@ -122,6 +125,7 @@ screen:myepic:simple:
 
 screen:orders:details:
   description: Order details
+  tags: [stage:done]
   layout: $layout.global.main
   data:
     order_id: input uuid

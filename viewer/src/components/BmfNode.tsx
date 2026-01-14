@@ -74,6 +74,14 @@ function ComponentRow({ component, onReferenceClick, onHiddenReferenceClick, ref
       )}
       {component.reference && (
         <>
+          {/* Always create handle for edges to connect to */}
+          <Handle
+            type="source"
+            position={Position.Right}
+            id={component.id}
+            className="bmf-component-handle"
+          />
+
           {/* Broken reference: show broken badge with X */}
           {isBroken && (
             <span
@@ -85,35 +93,27 @@ function ComponentRow({ component, onReferenceClick, onHiddenReferenceClick, ref
             </span>
           )}
 
-          {/* Connected or Hidden: show handle and inline badge */}
+          {/* Connected or Hidden: show inline badge */}
           {(isConnected || isHidden) && (
-            <>
-              <Handle
-                type="source"
-                position={Position.Right}
-                id={component.id}
-                className="bmf-component-handle"
-              />
-              <span
-                className="bmf-hidden-ref-inline"
-                style={{ backgroundColor: getLightColor(targetTypeColor, 0.7) }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (isHidden) {
-                    onHiddenReferenceClick?.(component.reference!);
-                  } else {
-                    onReferenceClick?.(component.reference!);
-                  }
-                }}
-                title={isHidden
-                  ? `${component.reference} is hidden by filters. Click to view.`
-                  : `Navigate to ${component.reference}`
+            <span
+              className="bmf-hidden-ref-inline"
+              style={{ backgroundColor: getLightColor(targetTypeColor, 0.7) }}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (isHidden) {
+                  onHiddenReferenceClick?.(component.reference!);
+                } else {
+                  onReferenceClick?.(component.reference!);
                 }
-              >
-                {isHidden && <EyeOffIcon />}
-                {component.reference}
-              </span>
-            </>
+              }}
+              title={isHidden
+                ? `${component.reference} is hidden by filters. Click to view.`
+                : `Navigate to ${component.reference}`
+              }
+            >
+              {isHidden && <EyeOffIcon />}
+              {component.reference}
+            </span>
           )}
         </>
       )}
