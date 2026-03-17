@@ -219,6 +219,77 @@ This prevents silent information loss.
 
 After completing this checklist, you have a complete inventory of what needs to be captured.
 
+**D10. Domain modeling — entity identification and abstraction:**
+
+Before writing any YAML, analyze the extracted inventory and identify the correct
+domain abstractions. This is the most important modeling step — wrong entity
+boundaries will cascade into every subsequent artifact (screens, actions, test cases).
+
+**Step 1. Identify core domain concepts:**
+- Walk through the extraction inventory and highlight every **noun** that the system
+  manages, stores, or operates on. These are entity candidates.
+- Distinguish between:
+  - **Entities** — things with identity and lifecycle (User, Order, Route, Application)
+  - **Value objects** — data without own identity, always owned by an entity
+    (Address, DateRange, GeoPoint, Score). These become `props` or `data` on a
+    parent entity, NOT separate `entity:*` entries.
+  - **Aggregates** — clusters of entities that change together and share a
+    transactional boundary (Order + OrderItems, Competition + Stages + Tasks)
+
+**Step 2. Validate abstraction level:**
+- **Too granular?** If an entity has ≤ 2 props and no independent lifecycle (can't
+  exist without a parent, never queried independently), it's likely a value object.
+  Merge it into the parent entity as `props` or `data`.
+  Bad: `entity:user:phone`, `entity:user:email` as separate entities.
+  Good: `entity:user:profile` with `props.phone`, `props.email`.
+- **Too coarse?** If an entity has 15+ props covering unrelated concerns, or props
+  with different lifecycles (some set at registration, others updated daily), it's
+  likely multiple entities merged. Split by lifecycle, ownership, or bounded context.
+  Bad: `entity:app:everything` with user data, settings, content, and analytics.
+  Good: `entity:user:profile`, `entity:user:settings`, `entity:content:article`.
+- **Correct cohesion?** Every prop on an entity should be "about" the same concept.
+  If you can split props into two groups where group A never changes when group B
+  changes — they are different entities.
+
+**Step 3. Identify relationships and ownership:**
+- For each entity, determine: who creates it? Who owns it? What happens to it when
+  the owner is deleted?
+- Parent entities reference children (via `$entity.children` queries), not the other
+  way around as a primary pattern.
+- Map the relationships: 1:1, 1:N, N:M. N:M relationships often imply a junction
+  entity (Enrollment, Membership, Subscription).
+
+**Step 4. Check for implicit entities:**
+- The source may describe processes or flows without naming the underlying domain
+  object. Look for hidden nouns:
+  - "User submits an application" → `entity:*:application` (the application is the entity)
+  - "System sends notification" → `entity:*:notification` (notification has content,
+    recipient, status — it's an entity)
+  - "Admin reviews and approves" → implies a review/moderation entity with status
+    transitions, or at minimum a status field on the reviewed entity
+  - "User progress through stages" → `entity:*:progress` or `entity:*:participation`
+    tracking user-stage state
+
+**Step 5. Use ubiquitous language:**
+- Entity IDs must use the domain language from the source, not implementation or UI
+  terms. If the source says "заявка" — use `application`, not `form-data`.
+  If the source says "маршрут" — use `route`, not `map-path`.
+- If the source uses a specific term consistently, preserve it. Don't "improve" or
+  synonymize domain language — it creates disconnect between spec and code.
+
+**Step 6. Separate domain from UI concerns:**
+- A screen showing a "list + detail" pattern does NOT mean there are two entities.
+  The list and detail views are screens; the underlying thing is one entity.
+- Conversely, one screen showing data from multiple entities does NOT mean those
+  should be merged. A dashboard screen may display Users, Orders, and Metrics —
+  three distinct entities shown together.
+- Rule of thumb: entities exist because the **domain** needs them, not because
+  the **UI** shows them.
+
+Output of this step: a list of identified entities with their type (entity/value
+object/aggregate root), key props, and relationships. Use this list to guide
+the entity creation in step E.
+
 **E. Populate entities following the assembly order from README:**
 
 1. **main.yaml** — Update the root entity with project name and description
@@ -362,6 +433,20 @@ npx ts-node utils/check-references.ts bmfs/{path}
 ```
 
 Fix any validation errors before proceeding.
+
+**I2. Run YAML refinement:**
+
+Run `/bmf.refine-yaml bmfs/{path}` to find obvious missing logic elements (implied entities, missing fields, CRUD gaps, navigation holes, missing error handling).
+
+When called from this flow:
+- Fix CRITICAL findings automatically (missing entities, broken references)
+- Collect WARNING findings — present them in the final summary (step 8)
+
+Re-validate after fixes:
+```bash
+npx ts-node utils/validate-schema.ts bmfs/{path}
+npx ts-node utils/check-references.ts bmfs/{path}
+```
 
 **J. Generate project README.md:**
 
